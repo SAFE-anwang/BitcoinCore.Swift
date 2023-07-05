@@ -1,3 +1,4 @@
+import RxSwift
 import ObjectMapper
 import Alamofire
 import HsToolKit
@@ -15,13 +16,14 @@ public class BCoinApi {
 
 extension BCoinApi: ISyncTransactionApi {
 
-    public func transactions(addresses: [String]) async throws -> [SyncTransactionItem] {
+    public func getTransactions(addresses: [String]) -> Single<[SyncTransactionItem]> {
         let parameters: Parameters = [
             "addresses": addresses
         ]
         let path = "/tx/address"
 
-        return try await networkManager.fetch(url: url + path, method: .post, parameters: parameters, encoding: JSONEncoding.default)
+        let request = networkManager.session.request(url + path, method: .post, parameters: parameters, encoding: JSONEncoding.default)
+        return networkManager.single(request: request)
     }
 
 }

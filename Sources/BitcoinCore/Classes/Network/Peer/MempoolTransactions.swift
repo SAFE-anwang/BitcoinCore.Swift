@@ -1,8 +1,8 @@
 import Foundation
-import Combine
+import RxSwift
 
 class MempoolTransactions {
-    private var cancellables = Set<AnyCancellable>()
+    private let disposeBag = DisposeBag()
     private let transactionSyncer: ITransactionSyncer
     private let transactionSender: ITransactionSender?
     private var requestedTransactions = [String: [Data]]()
@@ -45,15 +45,16 @@ class MempoolTransactions {
         }
     }
 
-    func subscribeTo(publisher: AnyPublisher<PeerGroupEvent, Never>) {
-        publisher
-                .sink { [weak self] event in
-                    switch event {
-                    case .onPeerDisconnect(let peer, let error): self?.onPeerDisconnect(peer: peer, error: error)
-                    default: ()
-                    }
-                }
-                .store(in: &cancellables)
+    func subscribeTo(observable: Observable<PeerGroupEvent>) {
+        observable.subscribe(
+                        onNext: { [weak self] in
+                            switch $0 {
+                            case .onPeerDisconnect(let peer, let error): self?.onPeerDisconnect(peer: peer, error: error)
+                            default: ()
+                            }
+                        }
+                )
+                .disposed(by: disposeBag)
     }
 
 }

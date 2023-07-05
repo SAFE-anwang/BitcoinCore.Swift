@@ -1,4 +1,5 @@
 import Foundation
+import RxSwift
 import ObjectMapper
 import HsToolKit
 
@@ -17,7 +18,7 @@ class BlockDiscoveryBatch {
         self.gapLimit = gapLimit
     }
 
-    private func fetchRecursive(blockHashes: [BlockHash] = [], externalBatchInfo: KeyBlockHashBatchInfo = KeyBlockHashBatchInfo(), internalBatchInfo: KeyBlockHashBatchInfo = KeyBlockHashBatchInfo()) async throws -> ([PublicKey], [BlockHash]) {
+    private func fetchRecursive(blockHashes: [BlockHash] = [], externalBatchInfo: KeyBlockHashBatchInfo = KeyBlockHashBatchInfo(), internalBatchInfo: KeyBlockHashBatchInfo = KeyBlockHashBatchInfo()) -> Single<([PublicKey], [BlockHash])> {
         let maxHeight = maxHeight
 
         let externalCount = gapLimit - externalBatchInfo.prevCount + externalBatchInfo.prevLastUsedIndex + 1
@@ -26,22 +27,28 @@ class BlockDiscoveryBatch {
         var externalNewKeys = [PublicKey]()
         var internalNewKeys = [PublicKey]()
 
-        externalNewKeys.append(contentsOf: try publicKeyFetcher.publicKeys(indices: UInt32(externalBatchInfo.startIndex)..<UInt32(externalBatchInfo.startIndex + externalCount), external: true))
-        internalNewKeys.append(contentsOf: try publicKeyFetcher.publicKeys(indices: UInt32(internalBatchInfo.startIndex)..<UInt32(internalBatchInfo.startIndex + internalCount), external: false))
+        do {
+            externalNewKeys.append(contentsOf: try publicKeyFetcher.publicKeys(indices: UInt32(externalBatchInfo.startIndex)..<UInt32(externalBatchInfo.startIndex + externalCount), external: true))
+            internalNewKeys.append(contentsOf: try publicKeyFetcher.publicKeys(indices: UInt32(internalBatchInfo.startIndex)..<UInt32(internalBatchInfo.startIndex + internalCount), external: false))
+        } catch {
+            return Single.error(error)
+        }
 
-        let fetcherResponse = try await blockHashFetcher.getBlockHashes(externalKeys: externalNewKeys, internalKeys: internalNewKeys)
+        return blockHashFetcher.getBlockHashes(externalKeys: externalNewKeys, internalKeys: internalNewKeys).flatMap { [weak self] fetcherResponse -> Single<([PublicKey], [BlockHash])> in
+            let resultBlockHashes = blockHashes + fetcherResponse.blockHashes.filter { $0.height <= maxHeight }
+            let externalPublicKeys = externalBatchInfo.publicKeys + externalNewKeys
+            let internalPublicKeys = internalBatchInfo.publicKeys + internalNewKeys
 
-        let resultBlockHashes = blockHashes + fetcherResponse.blockHashes.filter { $0.height <= maxHeight }
-        let externalPublicKeys = externalBatchInfo.publicKeys + externalNewKeys
-        let internalPublicKeys = internalBatchInfo.publicKeys + internalNewKeys
+            let finishSingle = Single.just((externalPublicKeys + internalPublicKeys, resultBlockHashes))
 
-        if fetcherResponse.externalLastUsedIndex < 0 && fetcherResponse.internalLastUsedIndex < 0 {
-            return (externalPublicKeys + internalPublicKeys, resultBlockHashes)
-        } else {
-            let externalBatch = KeyBlockHashBatchInfo(publicKeys: externalPublicKeys, prevCount: externalCount, prevLastUsedIndex: fetcherResponse.externalLastUsedIndex, startIndex: externalBatchInfo.startIndex + externalCount)
-            let internalBatch = KeyBlockHashBatchInfo(publicKeys: internalPublicKeys, prevCount: internalCount, prevLastUsedIndex: fetcherResponse.internalLastUsedIndex, startIndex: internalBatchInfo.startIndex + internalCount)
+            if fetcherResponse.externalLastUsedIndex < 0 && fetcherResponse.internalLastUsedIndex < 0 {
+                return finishSingle
+            } else {
+                let externalBatch = KeyBlockHashBatchInfo(publicKeys: externalPublicKeys, prevCount: externalCount, prevLastUsedIndex: fetcherResponse.externalLastUsedIndex, startIndex: externalBatchInfo.startIndex + externalCount)
+                let internalBatch = KeyBlockHashBatchInfo(publicKeys: internalPublicKeys, prevCount: internalCount, prevLastUsedIndex: fetcherResponse.internalLastUsedIndex, startIndex: internalBatchInfo.startIndex + internalCount)
 
-            return try await fetchRecursive(blockHashes: resultBlockHashes, externalBatchInfo: externalBatch, internalBatchInfo: internalBatch)
+                return self?.fetchRecursive(blockHashes: resultBlockHashes, externalBatchInfo: externalBatch, internalBatchInfo: internalBatch) ?? finishSingle
+            }
         }
     }
 
@@ -49,8 +56,8 @@ class BlockDiscoveryBatch {
 
 extension BlockDiscoveryBatch: IBlockDiscovery {
 
-    func discoverBlockHashes() async throws -> ([PublicKey], [BlockHash]) {
-        try await fetchRecursive()
+    func discoverBlockHashes() -> Single<([PublicKey], [BlockHash])> {
+        fetchRecursive()
     }
 
 }

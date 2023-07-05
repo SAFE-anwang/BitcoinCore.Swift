@@ -5,9 +5,11 @@ import HsExtensions
 class NetworkMessageParser: INetworkMessageParser {
     private let magic: UInt32
     private var messageParsers = [String: IMessageParser]()
+    private let network: INetwork
 
-    init(magic: UInt32) {
-        self.magic = magic
+    init(network: INetwork) {
+        self.magic = network.magic
+        self.network = network
     }
 
     func add(parser: IMessageParser) {
@@ -34,7 +36,11 @@ class NetworkMessageParser: INetworkMessageParser {
         guard checksum == checksumConfirm else {
             return nil
         }
-
+        // update for safe
+        if let messageParser = messageParsers[command],  let transactionMessage = messageParser as? TransactionMessageParser {
+            transactionMessage.isSafe = self.network.isSafe()
+        }
+        
         let message = messageParsers[command]?.parse(data: payload) ?? UnknownMessage(data: payload)
 
         return NetworkMessage(magic: magic, command: command, length: length, checksum: checksum, message: message)
@@ -206,9 +212,11 @@ class MerkleBlockMessageParser: IMessageParser {
 
 class TransactionMessageParser: IMessageParser {
     var id: String { return "tx" }
-
+    
+    var isSafe: Bool = false
+    
     func parse(data: Data) -> IMessage {
-        return TransactionMessage(transaction: TransactionSerializer.deserialize(data: data), size: data.count)
+        return TransactionMessage(transaction: TransactionSerializer.deserialize(data: data, isSafe: isSafe), size: data.count)
     }
 
 }

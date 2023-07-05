@@ -1,5 +1,5 @@
 import Foundation
-import Combine
+import RxSwift
 import HsToolKit
 
 public enum InitialBlockDownloadEvent {
@@ -12,7 +12,7 @@ public class InitialBlockDownload {
     public weak var listener: IBlockSyncListener?
     private static let peerSwitchMinimumRatio = 1.5
 
-    private var cancellables = Set<AnyCancellable>()
+    private var disposeBag = DisposeBag()
     private var blockSyncer: IBlockSyncer
     private let peerManager: IPeerManager
     private let merkleBlockValidator: IMerkleBlockValidator
@@ -22,7 +22,8 @@ public class InitialBlockDownload {
     private var minTransactionsSize: Double = 0
     private var slowPeersDisconnected = 0
 
-    private let subject = PassthroughSubject<InitialBlockDownloadEvent, Never>()
+    private let subject = PublishSubject<InitialBlockDownloadEvent>()
+    public let observable: Observable<InitialBlockDownloadEvent>
 
     private var syncedStates = [String: Bool]()
     private var blockHashesSyncedStates = [String: Bool]()
@@ -36,17 +37,15 @@ public class InitialBlockDownload {
 
     init(blockSyncer: IBlockSyncer, peerManager: IPeerManager, merkleBlockValidator: IMerkleBlockValidator,
          peersQueue: DispatchQueue = DispatchQueue(label: "io.horizontalsystems.bitcoin-core.initial-block-download", qos: .userInitiated),
+         scheduler: SchedulerType = SerialDispatchQueueScheduler(qos: .background),
          logger: Logger? = nil) {
         self.blockSyncer = blockSyncer
         self.peerManager = peerManager
         self.merkleBlockValidator = merkleBlockValidator
         self.peersQueue = peersQueue
         self.logger = logger
+        self.observable = subject.asObservable().observeOn(scheduler)
         resetRequiredDownloadSpeed()
-    }
-
-    public var publisher: AnyPublisher<InitialBlockDownloadEvent, Never> {
-        subject.eraseToAnyPublisher()
     }
 
     private func syncedState(_ peer: IPeer) -> Bool {
@@ -64,7 +63,7 @@ public class InitialBlockDownload {
 
         let nonSyncedPeers = peerManager.sorted.filter { !syncedState($0) }
         if nonSyncedPeers.isEmpty {
-            subject.send(.onAllPeersSynced)
+            subject.onNext(.onAllPeersSynced)
         }
 
         if let peer = nonSyncedPeers.first(where: { $0.ready }) {
@@ -130,7 +129,7 @@ public class InitialBlockDownload {
         blockHashesSyncedStates[peer.host] = true
         syncedPeers.append(peer)
 
-        subject.send(.onPeerSynced(peer: peer))
+        subject.onNext(.onPeerSynced(peer: peer))
 
         if blockSyncer.localDownloadedBestBlockHeight >= peer.announcedLastBlockHeight {
             // Some peers fail to send InventoryMessage within expected time
@@ -146,23 +145,24 @@ public class InitialBlockDownload {
         if let index = syncedPeers.firstIndex(where: { $0.equalTo(peer) }) {
             syncedPeers.remove(at: index)
         }
-        subject.send(.onPeerNotSynced(peer: peer))
+        subject.onNext(.onPeerNotSynced(peer: peer))
     }
 
-    func subscribeTo(publisher: AnyPublisher<PeerGroupEvent, Never>) {
-        publisher
-                .sink { [weak self] event in
-                    switch event {
-                    case .onStart: self?.onStart()
-                    case .onStop: self?.onStop()
-                    case .onPeerCreate(let peer): self?.onPeerCreate(peer: peer)
-                    case .onPeerConnect(let peer): self?.onPeerConnect(peer: peer)
-                    case .onPeerDisconnect(let peer, let error): self?.onPeerDisconnect(peer: peer, error: error)
-                    case .onPeerReady(let peer): self?.onPeerReady(peer: peer)
-                    default: ()
-                    }
-                }
-                .store(in: &cancellables)
+    func subscribeTo(observable: Observable<PeerGroupEvent>) {
+        observable.subscribe(
+                        onNext: { [weak self] in
+                            switch $0 {
+                            case .onStart: self?.onStart()
+                            case .onStop: self?.onStop()
+                            case .onPeerCreate(let peer): self?.onPeerCreate(peer: peer)
+                            case .onPeerConnect(let peer): self?.onPeerConnect(peer: peer)
+                            case .onPeerDisconnect(let peer, let error): self?.onPeerDisconnect(peer: peer, error: error)
+                            case .onPeerReady(let peer): self?.onPeerReady(peer: peer)
+                            default: ()
+                            }
+                        }
+                )
+                .disposed(by: disposeBag)
     }
 
     public var hasSyncedPeer: Bool {

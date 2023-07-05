@@ -122,11 +122,11 @@ public class TransactionSerializer {
         return data
     }
 
-    static public func deserialize(data: Data) -> FullTransaction {
-        return deserialize(byteStream: ByteStream(data))
+    static public func deserialize(data: Data, isSafe: Bool = false) -> FullTransaction {
+        return deserialize(byteStream: ByteStream(data), isSafe: isSafe)
     }
 
-    static public func deserialize(byteStream: ByteStream) -> FullTransaction {
+    static public func deserialize(byteStream: ByteStream, isSafe: Bool = false) -> FullTransaction {
         let transaction = Transaction()
         var inputs = [Input]()
         var outputs = [Output]()
@@ -148,9 +148,16 @@ public class TransactionSerializer {
 
         let txOutCount = byteStream.read(VarInt.self)
         for i in 0..<Int(txOutCount.underlyingValue) {
-            let output = TransactionOutputSerializer.deserialize(byteStream: byteStream)
-            output.index = i
-            outputs.append(output)
+            if isSafe == true {
+                let output = TransactionOutputSerializer.deserializeSafe(byteStream: byteStream, vout: i, txVersion: transaction.version)
+                output.index = i
+                outputs.append(output)
+            }else {
+                let output = TransactionOutputSerializer.deserialize(byteStream: byteStream)
+                output.index = i
+                outputs.append(output)
+            }
+
         }
 
         if transaction.segWit {

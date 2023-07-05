@@ -107,7 +107,7 @@ public class BitcoinCoreBuilder {
     public init(logger: Logger) {
         self.logger = logger
     }
-
+    
     public func build() throws -> BitcoinCore {
         guard let extendedKey = extendedKey else {
             throw BuildError.noSeedData
@@ -174,7 +174,7 @@ public class BitcoinCoreBuilder {
             }
         }
 
-        let networkMessageParser = NetworkMessageParser(magic: network.magic)
+        let networkMessageParser = NetworkMessageParser(network: network)
         let networkMessageSerializer = NetworkMessageSerializer(magic: network.magic)
 
         let doubleShaHasher = DoubleShaHasher()
@@ -199,7 +199,7 @@ public class BitcoinCoreBuilder {
         let pendingTransactionProcessor = PendingTransactionProcessor(storage: storage, extractor: transactionExtractor, publicKeyManager: publicKeyManager, irregularOutputFinder: irregularOutputFinder, conflictsResolver: transactionConflictResolver, listener: dataProvider, queue: transactionsProcessorQueue)
 
         let peerDiscovery = PeerDiscovery()
-        let peerAddressManager = PeerAddressManager(storage: storage, dnsSeeds: network.dnsSeeds, peerDiscovery: peerDiscovery, logger: logger)
+        let peerAddressManager = PeerAddressManager(storage: storage, network: network, peerDiscovery: peerDiscovery, logger: logger)
         peerDiscovery.peerAddressManager = peerAddressManager
         let bloomFilterManager = BloomFilterManager(factory: factory)
 
@@ -333,14 +333,14 @@ public class BitcoinCoreBuilder {
                 .add(messageSerializer: TransactionMessageSerializer())
                 .add(messageSerializer: FilterLoadMessageSerializer())
 
-        bloomFilterLoader.subscribeTo(publisher: peerGroup.publisher)
-        initialBlockDownload.subscribeTo(publisher: peerGroup.publisher)
-        mempoolTransactions.subscribeTo(publisher: peerGroup.publisher)
+        bloomFilterLoader.subscribeTo(observable: peerGroup.observable)
+        initialBlockDownload.subscribeTo(observable: peerGroup.observable)
+        mempoolTransactions.subscribeTo(observable: peerGroup.observable)
 
         bitcoinCore.add(peerTaskHandler: initialBlockDownload)
         bitcoinCore.add(inventoryItemsHandler: initialBlockDownload)
 
-        transactionSender?.subscribeTo(publisher: initialBlockDownload.publisher)
+        transactionSender?.subscribeTo(observable: initialBlockDownload.observable)
 
         if let transactionSender = transactionSender {
             bitcoinCore.add(peerTaskHandler: transactionSender)

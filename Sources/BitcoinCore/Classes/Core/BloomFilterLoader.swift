@@ -1,7 +1,7 @@
-import Combine
+import RxSwift
 
 class BloomFilterLoader: IBloomFilterManagerDelegate {
-    private var cancellables = Set<AnyCancellable>()
+    private let disposeBag = DisposeBag()
     private let bloomFilterManager: IBloomFilterManager
     private var peerManager: IPeerManager
 
@@ -22,15 +22,16 @@ class BloomFilterLoader: IBloomFilterManagerDelegate {
         }
     }
 
-    func subscribeTo(publisher: AnyPublisher<PeerGroupEvent, Never>) {
-        publisher
-                .sink { [weak self] event in
-                    switch event {
-                    case .onPeerConnect(let peer): self?.onPeerConnect(peer: peer)
-                    default: ()
-                    }
-                }
-                .store(in: &cancellables)
+    func subscribeTo(observable: Observable<PeerGroupEvent>) {
+        observable.subscribe(
+                        onNext: { [weak self] in
+                            switch $0 {
+                            case .onPeerConnect(let peer): self?.onPeerConnect(peer: peer)
+                            default: ()
+                            }
+                        }
+                )
+                .disposed(by: disposeBag)
     }
 
 }

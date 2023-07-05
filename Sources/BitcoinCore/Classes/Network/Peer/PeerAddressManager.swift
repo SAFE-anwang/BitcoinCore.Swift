@@ -5,15 +5,15 @@ class PeerAddressManager {
     weak var delegate: IPeerAddressManagerDelegate?
 
     private let storage: IStorage
-    private let dnsSeeds: [String]
+    private let network: INetwork
     private var peerDiscovery: IPeerDiscovery
     private let state: PeerAddressManagerState
     private let logger: Logger?
     private let queue = DispatchQueue(label: "io.horizontalsystems.bitcoin-core.peer-address-manager", qos: .background)
 
-    init(storage: IStorage, dnsSeeds: [String], peerDiscovery: IPeerDiscovery, state: PeerAddressManagerState = PeerAddressManagerState(), logger: Logger? = nil) {
+    init(storage: IStorage, network: INetwork, peerDiscovery: IPeerDiscovery, state: PeerAddressManagerState = PeerAddressManagerState(), logger: Logger? = nil) {
         self.storage = storage
-        self.dnsSeeds = dnsSeeds
+        self.network = network
         self.peerDiscovery = peerDiscovery
         self.state = state
         self.logger = logger
@@ -24,16 +24,22 @@ class PeerAddressManager {
 extension PeerAddressManager: IPeerAddressManager {
 
     var ip: String? {
-        guard let ip = storage.leastScoreFastestPeerAddress(excludingIps: state.usedIps)?.ip else {
-            peerDiscovery.lookup(dnsSeeds: dnsSeeds)
+        guard let ip = network.isSafe() ? storage.leastScoreFastestPeerAddressSafe(excludingIps: state.usedIps)?.ip : storage.leastScoreFastestPeerAddress(excludingIps: state.usedIps)?.ip else {
+            peerDiscovery.lookup(dnsSeeds: network.dnsSeeds)
             return nil
         }
-
-        queue.sync {
-            state.add(usedIp: ip)
+        
+        if network.isSafe(), !network.isMainNode(ip: ip), let _ip = network.getMainNodeIp(list: state.usedIps) {
+            queue.sync {
+                state.add(usedIp: _ip)
+            }
+            return _ip
+        }else {
+            queue.sync {
+                state.add(usedIp: ip)
+            }
+            return ip
         }
-
-        return ip
     }
 
     var hasFreshIps: Bool {
@@ -53,6 +59,7 @@ extension PeerAddressManager: IPeerAddressManager {
 
     func markFailed(ip: String) {
         queue.sync {
+            network.markedFailed(ip: ip)
             state.remove(usedIp: ip)
             storage.deletePeerAddress(byIp: ip)
         }
@@ -78,6 +85,13 @@ extension PeerAddressManager: IPeerAddressManager {
     func markConnected(peer: IPeer) {
         queue.sync {
             storage.set(connectionTime: peer.connectionTime, toPeerAddress: peer.host)
+        }
+    }
+    
+    // safe
+    func saveLastBlock(ip: String, lastBlock: Int32) {
+        queue.sync {
+            storage.saveLastBlock(ip: ip, lastBlock: lastBlock)
         }
     }
 }

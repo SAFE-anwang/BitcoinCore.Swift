@@ -1,3 +1,5 @@
+import RxSwift
+
 class TransactionMetadataExtractor {
     private let myOutputsCache: IOutputsCache
     private let storage: IOutputStorage

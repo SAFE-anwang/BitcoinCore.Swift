@@ -40,13 +40,17 @@ public class Output: Record {
     public var pluginId: UInt8? = nil
     public var pluginData: String? = nil
     public var signatureScriptFunction: (([Data]) -> Data)? = nil
-
+    
+    // UPDATE FOR SAFE TRANSACTION-OUTPUT
+    public var unlockedHeight: Int? = nil
+    public var reserve: Data? = nil
+    
     public func set(publicKey: PublicKey) {
         self.publicKeyPath = publicKey.path
         self.changeOutput = !publicKey.external
     }
 
-    public init(withValue value: Int, index: Int, lockingScript script: Data, transactionHash: Data = Data(), type: ScriptType = .unknown, redeemScript: Data? = nil, address: String? = nil, lockingScriptPayload: Data? = nil, publicKey: PublicKey? = nil) {
+    public init(withValue value: Int, index: Int, lockingScript script: Data, transactionHash: Data = Data(), type: ScriptType = .unknown, redeemScript: Data? = nil, address: String? = nil, lockingScriptPayload: Data? = nil, publicKey: PublicKey? = nil, unlockedHeight: Int? = nil, reserve: Data? = nil) {
         self.value = value
         self.lockingScript = script
         self.index = index
@@ -55,7 +59,11 @@ public class Output: Record {
         self.redeemScript = redeemScript
         self.address = address
         self.lockingScriptPayload = lockingScriptPayload
-
+        
+        // UPDATE FOR SAFE TRANSACTION-OUTPUT
+        self.unlockedHeight = unlockedHeight
+        self.reserve = reserve
+        
         super.init()
 
         if let publicKey = publicKey {
@@ -81,6 +89,9 @@ public class Output: Record {
         case pluginId
         case pluginData
         case failedToSpend
+        
+        case unlockedHeight // SAFE
+        case reserve // SAFE
     }
 
     required init(row: Row) {
@@ -97,7 +108,10 @@ public class Output: Record {
         pluginId = row[Columns.pluginId]
         pluginData = row[Columns.pluginData]
         failedToSpend = row[Columns.failedToSpend]
-
+        
+        unlockedHeight = row[Columns.unlockedHeight]
+        reserve = row[Columns.reserve]
+        
         super.init(row: row)
     }
 
@@ -115,6 +129,9 @@ public class Output: Record {
         container[Columns.pluginId] = pluginId
         container[Columns.pluginData] = pluginData
         container[Columns.failedToSpend] = failedToSpend
+        
+        container[Columns.unlockedHeight] = unlockedHeight
+        container[Columns.reserve] = reserve
     }
 
 }

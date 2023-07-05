@@ -4,11 +4,13 @@ public class PeerAddress: Record {
     let ip: String
     var score: Int
     var connectionTime: Double?
+    var lastBlock: Int32
 
-    public init(ip: String, score: Int) {
+    public init(ip: String, score: Int, lastBlock: Int32 = 0 ) {
         self.ip = ip
         self.score = score
-
+        self.lastBlock = lastBlock
+        
         super.init()
     }
 
@@ -20,13 +22,14 @@ public class PeerAddress: Record {
         case ip
         case score
         case connectionTime
+        case lastBlock
     }
 
     required init(row: Row) {
         ip = row[Columns.ip]
         score = row[Columns.score]
         connectionTime = row[Columns.connectionTime]
-
+        lastBlock = row[Columns.lastBlock]
         super.init(row: row)
     }
 
@@ -34,6 +37,7 @@ public class PeerAddress: Record {
         container[Columns.ip] = ip
         container[Columns.score] = score
         container[Columns.connectionTime] = connectionTime
+        container[Columns.lastBlock] = lastBlock
     }
 
 }

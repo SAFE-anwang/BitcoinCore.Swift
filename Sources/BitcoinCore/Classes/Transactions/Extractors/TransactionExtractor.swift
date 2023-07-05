@@ -1,3 +1,5 @@
+import RxSwift
+
 class TransactionExtractor {
     private let outputScriptTypeParser: ITransactionExtractor
     private let publicKeySetter: ITransactionExtractor
