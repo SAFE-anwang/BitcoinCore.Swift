@@ -51,12 +51,12 @@ class PeerGroup {
         self.reachabilityManager = reachabilityManager
         self.peerAddressManager = peerAddressManager
         self.localDownloadedBestBlockHeight = localDownloadedBestBlockHeight
-        peerCountToHold = peerCount
+        self.peerCountToHold = peerCount
         self.peerManager = peerManager
 
         self.peersQueue = peersQueue
         self.inventoryQueue = inventoryQueue
-        eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: peerCount)
+        self.eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: peerCount)
 
         self.logger = logger
 
@@ -66,7 +66,7 @@ class PeerGroup {
     deinit {
         eventLoopGroup.shutdownGracefully { _ in }
     }
-
+        
     var publisher: AnyPublisher<PeerGroupEvent, Never> {
         subject.eraseToAnyPublisher()
     }
@@ -207,6 +207,10 @@ extension PeerGroup: PeerDelegate {
         case let inventoryMessage as InventoryMessage:
             inventoryQueue.async {
                 self.inventoryItemsHandler?.handleInventoryItems(peer: peer, inventoryItems: inventoryMessage.inventoryItems)
+            }
+        case let versionMessage as VersionMessage: // safe
+            inventoryQueue.async {
+                self.peerAddressManager.saveLastBlock(ip: peer.host, lastBlock: versionMessage.startHeight ?? 0)
             }
         default: ()
         }

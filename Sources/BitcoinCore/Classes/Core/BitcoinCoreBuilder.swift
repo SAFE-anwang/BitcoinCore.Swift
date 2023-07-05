@@ -107,7 +107,7 @@ public class BitcoinCoreBuilder {
     public init(logger: Logger) {
         self.logger = logger
     }
-
+    
     public func build() throws -> BitcoinCore {
         guard let extendedKey = extendedKey else {
             throw BuildError.noSeedData
@@ -174,7 +174,7 @@ public class BitcoinCoreBuilder {
             }
         }
 
-        let networkMessageParser = NetworkMessageParser(magic: network.magic)
+        let networkMessageParser = NetworkMessageParser(network: network)
         let networkMessageSerializer = NetworkMessageSerializer(magic: network.magic)
 
         let doubleShaHasher = DoubleShaHasher()
@@ -199,7 +199,7 @@ public class BitcoinCoreBuilder {
         let pendingTransactionProcessor = PendingTransactionProcessor(storage: storage, extractor: transactionExtractor, publicKeyManager: publicKeyManager, irregularOutputFinder: irregularOutputFinder, conflictsResolver: transactionConflictResolver, listener: dataProvider, queue: transactionsProcessorQueue)
 
         let peerDiscovery = PeerDiscovery()
-        let peerAddressManager = PeerAddressManager(storage: storage, dnsSeeds: network.dnsSeeds, peerDiscovery: peerDiscovery, logger: logger)
+        let peerAddressManager = PeerAddressManager(storage: storage, network: network, peerDiscovery: peerDiscovery, logger: logger)
         peerDiscovery.peerAddressManager = peerAddressManager
         let bloomFilterManager = BloomFilterManager(factory: factory)
 

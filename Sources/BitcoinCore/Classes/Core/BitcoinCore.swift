@@ -152,38 +152,42 @@ extension BitcoinCore {
     public func transaction(hash: String) -> TransactionInfo? {
         dataProvider.transaction(hash: hash)
     }
-
-    public func send(to address: String, value: Int, feeRate: Int, sortType: TransactionDataSortType, pluginData: [UInt8: IPluginData] = [:]) throws -> FullTransaction {
+    
+    // unlockedHeight、reverseHex UPDATE FOR SAFE
+    public func send(to address: String, value: Int, feeRate: Int, sortType: TransactionDataSortType, pluginData: [UInt8: IPluginData] = [:], unlockedHeight: Int? = nil, reverseHex: String? = nil) throws -> FullTransaction {
         guard let transactionCreator = transactionCreator else {
             throw CoreError.readOnlyCore
         }
 
-        return try transactionCreator.create(to: address, value: value, feeRate: feeRate, senderPay: true, sortType: sortType, pluginData: pluginData)
+        return try transactionCreator.create(to: address, value: value, feeRate: feeRate, senderPay: true, sortType: sortType, pluginData: pluginData, unlockedHeight: unlockedHeight, reverseHex: reverseHex)
     }
-
-    public func send(to hash: Data, scriptType: ScriptType, value: Int, feeRate: Int, sortType: TransactionDataSortType) throws -> FullTransaction {
+    
+    // unlockedHeight、reverseHex UPDATE FOR SAFE
+    public func send(to hash: Data, scriptType: ScriptType, value: Int, feeRate: Int, sortType: TransactionDataSortType, unlockedHeight: Int? = nil, reverseHex: String? = nil) throws -> FullTransaction {
         guard let transactionCreator = transactionCreator else {
             throw CoreError.readOnlyCore
         }
 
         let toAddress = try addressConverter.convert(lockingScriptPayload: hash, type: scriptType)
-        return try transactionCreator.create(to: toAddress.stringValue, value: value, feeRate: feeRate, senderPay: true, sortType: sortType, pluginData: [:])
+        return try transactionCreator.create(to: toAddress.stringValue, value: value, feeRate: feeRate, senderPay: true, sortType: sortType, pluginData: [:], unlockedHeight: unlockedHeight, reverseHex: reverseHex)
     }
-
+    
+    // unlockedHeight、reverseHex UPDATE FOR SAFE
     func redeem(from unspentOutput: UnspentOutput, to address: String, feeRate: Int, sortType: TransactionDataSortType) throws -> FullTransaction {
         guard let transactionCreator = transactionCreator else {
             throw CoreError.readOnlyCore
         }
 
-        return try transactionCreator.create(from: unspentOutput, to: address, feeRate: feeRate, sortType: sortType)
+        return try transactionCreator.create(from: unspentOutput, to: address, feeRate: feeRate, sortType: sortType, unlockedHeight: nil, reverseHex: nil)
     }
-
+    
+    // unlockedHeight、reverseHex UPDATE FOR SAFE
     public func createRawTransaction(to address: String, value: Int, feeRate: Int, sortType: TransactionDataSortType, pluginData: [UInt8: IPluginData] = [:]) throws -> Data {
         guard let transactionCreator = transactionCreator else {
             throw CoreError.readOnlyCore
         }
 
-        return try transactionCreator.createRawTransaction(to: address, value: value, feeRate: feeRate, senderPay: true, sortType: sortType, pluginData: pluginData)
+        return try transactionCreator.createRawTransaction(to: address, value: value, feeRate: feeRate, senderPay: true, sortType: sortType, pluginData: pluginData, unlockedHeight: nil, reverseHex: nil)
     }
 
     public func validate(address: String, pluginData: [UInt8: IPluginData] = [:]) throws {

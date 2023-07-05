@@ -38,7 +38,8 @@ public class BaseTransactionInfoConverter: IBaseTransactionInfoConverter {
         }
 
         for output in transactionForInfo.outputs {
-            let outputInfo = TransactionOutputInfo(mine: output.publicKeyPath != nil, changeOutput: output.changeOutput, value: output.value, address: output.address)
+            // safe update
+            let outputInfo = TransactionOutputInfo(mine: output.publicKeyPath != nil, changeOutput: output.changeOutput, value: output.value, address: output.address, unlockedHeight: output.unlockedHeight)
 
             if let pluginId = output.pluginId, let pluginDataString = output.pluginData {
                 outputInfo.pluginId = pluginId

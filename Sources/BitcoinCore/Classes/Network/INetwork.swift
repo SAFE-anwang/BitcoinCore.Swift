@@ -12,5 +12,21 @@ public extension INetwork {
     var lastCheckpoint: Checkpoint {
         try! Checkpoint(bundleName: bundleName, network: String(describing: type(of: self)), blockType: .last)
     }
+    
+    func isMainNode(ip: String?) -> Bool {
+        return true
+    }
+
+    func getMainNodeIp(list: [String]) -> String? {
+        return ""
+    }
+    
+    func markedFailed(ip: String?) {
+        
+    }
+    
+    func isSafe() -> Bool {
+        return false
+    }
 
 }

@@ -52,6 +52,9 @@ public class TransactionOutputInfo: Codable {
     public let address: String?
     public var pluginId: UInt8? = nil
     public var pluginData: IPluginOutputData? = nil
+    
+    // update for SAFE
+    public var unlockedHeight: Int? = nil
 
     var pluginDataString: String? = nil
 
@@ -59,11 +62,12 @@ public class TransactionOutputInfo: Codable {
         case mine, changeOutput, value, address, pluginId, pluginDataString
     }
 
-    public init(mine: Bool, changeOutput: Bool, value: Int, address: String?) {
+    public init(mine: Bool, changeOutput: Bool, value: Int, address: String?, unlockedHeight: Int? = nil) {
         self.mine = mine
         self.changeOutput = changeOutput
         self.value = value
         self.address = address
+        self.unlockedHeight = unlockedHeight
     }
 
 }

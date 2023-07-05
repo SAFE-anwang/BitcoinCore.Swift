@@ -85,7 +85,7 @@ extension DataProvider: IBlockchainDataListener {
 }
 
 extension DataProvider: IDataProvider {
-
+    
     var lastBlockInfo: BlockInfo? {
         lastBlockInfoQueue.sync {
             _lastBlockInfo
@@ -103,7 +103,7 @@ extension DataProvider: IDataProvider {
 
         let transactions = storage.validOrInvalidTransactionsFullInfo(fromTimestamp: resolvedTimestamp, fromOrder: resolvedOrder, type: type, limit: limit)
 
-        return transactions.map { transactionInfoConverter.transactionInfo(fromTransaction: $0) }
+        return transactions.filter{ self.hasRightReserveOutput(transaction: $0) }.map { transactionInfoConverter.transactionInfo(fromTransaction: $0) }
     }
 
     func transaction(hash: String) -> TransactionInfo? {
@@ -138,5 +138,19 @@ extension DataProvider: IDataProvider {
         return storage.transactionFullInfo(byHash: hash)?.rawTransaction ??
                 storage.invalidTransaction(byHash: hash)?.rawTransaction
     }
-
+    
+    private func hasRightReserveOutput(transaction: FullTransactionForInfo) -> Bool {
+        let str = "7361666573706f730100c2f824c4364195b71a1fcfa0a28ebae20f3501b21b08ae6d6ae8a3bca98ad9d64136e299eba2400183cd0a479e6350ffaec71bcaf0714a024d14183c1407805d75879ea2bf6b691214c372ae21939b96a695c746a6"
+        for output in transaction.outputs {
+            if let reserveHex = output.reserve?.hs.hex {
+                // 普通交易, // coinbase 收益, // safe备注，也是属于safe交易
+                if reserveHex != "73616665",
+                    reserveHex != str,
+                    !reserveHex.starts(with: "736166650100c9dcee22bb18bd289bca86e2c8bbb6487089adc9a13d875e538dd35c70a6bea42c0100000a02010012") {
+                    return false
+                }
+            }
+        }
+        return true
+    }
 }

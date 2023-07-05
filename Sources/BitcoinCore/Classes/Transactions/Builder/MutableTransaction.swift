@@ -1,6 +1,10 @@
 import Foundation
 
 public class MutableTransaction {
+    
+    var unlockedHeight: Int? = nil // SAFE
+    var reverseHex: String? = nil // SAFE
+    
     var transaction = Transaction(version: 2, lockTime: 0)
     var inputsToSign = [InputToSign]()
     var outputs = [Output]()
@@ -13,7 +17,14 @@ public class MutableTransaction {
     private(set) var pluginData = [UInt8: Data]()
 
     var pluginDataOutputSize: Int {
-        pluginData.count > 0 ? 1 + pluginData.reduce(into: 0) { $0 += 1 + $1.value.count } : 0                // OP_RETURN (PLUGIN_ID PLUGIN_DATA)
+        if let reverseHex = reverseHex, !reverseHex.starts(with: "73616665") { // safe 线性锁仓
+            if let lineLock = reverseHex.stringToObj(LineLock.self) {
+                return pluginData.count > 0 ? lineLock.outputSize + 1 + pluginData.reduce(into: 0) { $0 += 1 + $1.value.count } : 0
+            }
+            return 0
+        }else {
+           return pluginData.count > 0 ? 1 + pluginData.reduce(into: 0) { $0 += 1 + $1.value.count } : 0                // OP_RETURN (PLUGIN_ID PLUGIN_DATA)
+        }
     }
 
     public init(outgoing: Bool = true) {

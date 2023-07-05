@@ -26,7 +26,7 @@ open class GrdbStorage {
             try db.create(table: PeerAddress.databaseTableName) { t in
                 t.column(PeerAddress.Columns.ip.name, .text).notNull()
                 t.column(PeerAddress.Columns.score.name, .integer).notNull()
-
+                t.column(PeerAddress.Columns.lastBlock.name, .integer).notNull() // safe
                 t.primaryKey([PeerAddress.Columns.ip.name], onConflict: .ignore)
             }
         }
@@ -133,6 +133,8 @@ open class GrdbStorage {
                 t.column(Output.Columns.scriptType.name, .integer)
                 t.column(Output.Columns.keyHash.name, .blob)
                 t.column(Output.Columns.address.name, .text)
+                t.column(Output.Columns.unlockedHeight.name, .integer) // SAFE
+                t.column(Output.Columns.reserve.name, .blob) // SAFE
 
                 t.primaryKey([Output.Columns.transactionHash.name, Output.Columns.index.name], onConflict: .abort)
                 t.foreignKey([Output.Columns.transactionHash.name], references: Transaction.databaseTableName, columns: [Transaction.Columns.dataHash.name], onDelete: .cascade, onUpdate: .cascade, deferred: true)
@@ -444,6 +446,16 @@ extension GrdbStorage: IStorage {
                     .fetchOne(db)
         }
     }
+    
+    /// safe
+    public func leastScoreFastestPeerAddressSafe(excludingIps: [String]) -> PeerAddress? {
+        try! dbPool.read { db in
+            try PeerAddress
+                    .filter(!excludingIps.contains(PeerAddress.Columns.ip))
+                    .order(PeerAddress.Columns.lastBlock.desc, PeerAddress.Columns.score.asc, PeerAddress.Columns.connectionTime.asc)
+                    .fetchOne(db)
+        }
+    }
 
     public func peerAddressExist(address: String) -> Bool {
         try! dbPool.read { db in
@@ -459,6 +471,17 @@ extension GrdbStorage: IStorage {
                 try peerAddress.insert(db)
             }
         }
+    }
+    
+    /// safe
+    public func saveLastBlock(ip: String, lastBlock: Int32) {
+        _ = try! dbPool.write { db in
+            if let peerAddress = try PeerAddress.filter(PeerAddress.Columns.ip == ip).fetchOne(db) {
+                peerAddress.lastBlock = lastBlock
+                try peerAddress.save(db)
+            }
+        }
+
     }
 
     public func deletePeerAddress(byIp ip: String) {

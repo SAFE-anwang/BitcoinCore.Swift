@@ -1,6 +1,6 @@
 import Foundation
-import Combine
 import BigInt
+import Combine
 import HsToolKit
 import NIO
 
@@ -47,6 +47,7 @@ protocol IPeerAddressManager: AnyObject {
     func markFailed(ip: String)
     func add(ips: [String])
     func markConnected(peer: IPeer)
+    func saveLastBlock(ip: String, lastBlock: Int32) // safe
 }
 
 protocol IApiSyncStateManager: AnyObject {
@@ -67,8 +68,10 @@ public protocol IStorage: IOutputStorage {
     func set(initialRestored: Bool)
 
     func leastScoreFastestPeerAddress(excludingIps: [String]) -> PeerAddress?
+    func leastScoreFastestPeerAddressSafe(excludingIps: [String]) -> PeerAddress? // safe
     func peerAddressExist(address: String) -> Bool
     func save(peerAddresses: [PeerAddress])
+    func saveLastBlock(ip: String, lastBlock: Int32) // safe
     func deletePeerAddress(byIp ip: String)
     func set(connectionTime: Double, toPeerAddress: String)
 
@@ -272,6 +275,7 @@ protocol IFactory {
     func transaction(version: Int, lockTime: Int) -> Transaction
     func inputToSign(withPreviousOutput: UnspentOutput, script: Data, sequence: Int) -> InputToSign
     func output(withIndex index: Int, address: Address, value: Int, publicKey: PublicKey?) -> Output
+    func output(withIndex index: Int, address: Address, value: Int, publicKey: PublicKey?, unlockedHeight: Int?, reserve: Data?) -> Output
     func nullDataOutput(data: Data) -> Output
     func bloomFilter(withElements: [Data]) -> BloomFilter
 }
@@ -372,14 +376,14 @@ public protocol ITransactionSyncer: AnyObject {
 }
 
 public protocol ITransactionCreator {
-    func create(to address: String, value: Int, feeRate: Int, senderPay: Bool, sortType: TransactionDataSortType, pluginData: [UInt8: IPluginData]) throws -> FullTransaction
-    func create(from: UnspentOutput, to address: String, feeRate: Int, sortType: TransactionDataSortType) throws -> FullTransaction
-    func createRawTransaction(to address: String, value: Int, feeRate: Int, senderPay: Bool, sortType: TransactionDataSortType, pluginData: [UInt8: IPluginData]) throws -> Data
+    func create(to address: String, value: Int, feeRate: Int, senderPay: Bool, sortType: TransactionDataSortType, pluginData: [UInt8: IPluginData], unlockedHeight: Int?, reverseHex: String?) throws -> FullTransaction
+    func create(from: UnspentOutput, to address: String, feeRate: Int, sortType: TransactionDataSortType, unlockedHeight: Int?, reverseHex: String?) throws -> FullTransaction
+    func createRawTransaction(to address: String, value: Int, feeRate: Int, senderPay: Bool, sortType: TransactionDataSortType, pluginData: [UInt8: IPluginData], unlockedHeight: Int?, reverseHex: String?) throws -> Data
 }
 
 protocol ITransactionBuilder {
-    func buildTransaction(toAddress: String, value: Int, feeRate: Int, senderPay: Bool, sortType: TransactionDataSortType, pluginData: [UInt8: IPluginData]) throws -> FullTransaction
-    func buildTransaction(from: UnspentOutput, toAddress: String, feeRate: Int, sortType: TransactionDataSortType) throws -> FullTransaction
+    func buildTransaction(toAddress: String, value: Int, feeRate: Int, senderPay: Bool, sortType: TransactionDataSortType, pluginData: [UInt8: IPluginData], unlockedHeight: Int?, reverseHex: String?) throws -> FullTransaction
+    func buildTransaction(from: UnspentOutput, toAddress: String, feeRate: Int, sortType: TransactionDataSortType, unlockedHeight: Int?, reverseHex: String?) throws -> FullTransaction
 }
 
 protocol ITransactionFeeCalculator {
@@ -497,6 +501,14 @@ public protocol INetwork: AnyObject {
     var coinType: UInt32 { get }
     var sigHash: SigHashType { get }
     var syncableFromApi: Bool { get }
+    
+    func isMainNode(ip: String?) -> Bool
+
+    func getMainNodeIp(list: [String]) -> String?
+    
+    func markedFailed(ip: String?)
+    
+    func isSafe() -> Bool
 }
 
 protocol IMerkleBlockValidator: AnyObject {

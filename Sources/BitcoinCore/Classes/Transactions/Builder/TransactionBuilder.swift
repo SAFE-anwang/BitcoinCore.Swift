@@ -17,8 +17,15 @@ class TransactionBuilder {
 
 extension TransactionBuilder: ITransactionBuilder {
 
-    func buildTransaction(toAddress: String, value: Int, feeRate: Int, senderPay: Bool, sortType: TransactionDataSortType, pluginData: [UInt8: IPluginData]) throws -> FullTransaction {
+    func buildTransaction(toAddress: String, value: Int, feeRate: Int, senderPay: Bool, sortType: TransactionDataSortType, pluginData: [UInt8: IPluginData], unlockedHeight: Int?, reverseHex: String?) throws -> FullTransaction {
         let mutableTransaction = MutableTransaction()
+        
+        if unlockedHeight != nil {
+            mutableTransaction.unlockedHeight = unlockedHeight;
+        }
+        if reverseHex != nil {
+            mutableTransaction.reverseHex = reverseHex
+        }
 
         try recipientSetter.setRecipient(to: mutableTransaction, toAddress: toAddress, value: value, pluginData: pluginData, skipChecks: false)
         try inputSetter.setInputs(to: mutableTransaction, feeRate: feeRate, senderPay: senderPay, sortType: sortType)
@@ -30,9 +37,16 @@ extension TransactionBuilder: ITransactionBuilder {
         return mutableTransaction.build()
     }
 
-    func buildTransaction(from unspentOutput: UnspentOutput, toAddress: String, feeRate: Int, sortType: TransactionDataSortType) throws -> FullTransaction {
+    func buildTransaction(from unspentOutput: UnspentOutput, toAddress: String, feeRate: Int, sortType: TransactionDataSortType, unlockedHeight: Int?, reverseHex: String?) throws -> FullTransaction {
         let mutableTransaction = MutableTransaction(outgoing: false)
-
+        
+        if unlockedHeight != nil {
+            mutableTransaction.unlockedHeight = unlockedHeight;
+        }
+        if reverseHex != nil {
+            mutableTransaction.reverseHex = reverseHex
+        }
+        
         try recipientSetter.setRecipient(to: mutableTransaction, toAddress: toAddress, value: unspentOutput.output.value, pluginData: [:], skipChecks: false)
         try inputSetter.setInputs(to: mutableTransaction, fromUnspentOutput: unspentOutput, feeRate: feeRate)
         lockTimeSetter.setLockTime(to: mutableTransaction)

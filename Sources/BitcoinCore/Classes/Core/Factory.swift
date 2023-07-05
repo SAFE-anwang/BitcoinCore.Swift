@@ -37,6 +37,11 @@ class Factory: IFactory {
     func output(withIndex index: Int, address: Address, value: Int, publicKey: PublicKey?) -> Output {
         Output(withValue: value, index: index, lockingScript: address.lockingScript, type: address.scriptType, address: address.stringValue, lockingScriptPayload: address.lockingScriptPayload, publicKey: publicKey)
     }
+    
+    // update for SAFE
+    func output(withIndex index: Int, address: Address, value: Int, publicKey: PublicKey?, unlockedHeight: Int?, reserve: Data?) -> Output {
+        Output(withValue: value, index: index, lockingScript: address.lockingScript, type: address.scriptType, address: address.stringValue, lockingScriptPayload: address.lockingScriptPayload, publicKey: publicKey, unlockedHeight: unlockedHeight, reserve: reserve)
+    }
 
     func nullDataOutput(data: Data) -> Output {
         Output(withValue: 0, index: 0, lockingScript: data, type: .nullData)
@@ -55,5 +60,4 @@ class Factory: IFactory {
     func bloomFilter(withElements elements: [Data]) -> BloomFilter {
         BloomFilter(elements: elements)
     }
-
 }

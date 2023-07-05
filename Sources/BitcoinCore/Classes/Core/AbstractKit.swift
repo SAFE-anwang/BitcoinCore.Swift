@@ -41,10 +41,14 @@ open class AbstractKit {
         bitcoinCore.transaction(hash: hash)
     }
 
-    open func send(to address: String, value: Int, feeRate: Int, sortType: TransactionDataSortType, pluginData: [UInt8: IPluginData] = [:]) throws -> FullTransaction {
-        try bitcoinCore.send(to: address, value: value, feeRate: feeRate, sortType: sortType, pluginData: pluginData)
+    open func sendSafe(to address: String, value: Int, feeRate: Int, sortType: TransactionDataSortType, pluginData: [UInt8: IPluginData] = [:], unlockedHeight: Int?, reverseHex: String?) throws -> FullTransaction {
+        try bitcoinCore.send(to: address, value: value, feeRate: feeRate, sortType: sortType, pluginData: pluginData, unlockedHeight: unlockedHeight ?? 0, reverseHex: reverseHex)
     }
-
+    
+    open func send(to address: String, value: Int, feeRate: Int, sortType: TransactionDataSortType, pluginData: [UInt8: IPluginData] = [:]) throws -> FullTransaction {
+        try bitcoinCore.send(to: address, value: value, feeRate: feeRate, sortType: sortType, pluginData: pluginData, unlockedHeight: nil, reverseHex: nil)
+    }
+    
     public func send(to hash: Data, scriptType: ScriptType, value: Int, feeRate: Int, sortType: TransactionDataSortType) throws -> FullTransaction {
         try bitcoinCore.send(to: hash, scriptType: scriptType, value: value, feeRate: feeRate, sortType: sortType)
     }

@@ -33,35 +33,41 @@ class TransactionCreator {
 
 extension TransactionCreator: ITransactionCreator {
 
-    func create(to address: String, value: Int, feeRate: Int, senderPay: Bool, sortType: TransactionDataSortType, pluginData: [UInt8: IPluginData] = [:]) throws -> FullTransaction {
+    func create(to address: String, value: Int, feeRate: Int, senderPay: Bool, sortType: TransactionDataSortType, pluginData: [UInt8: IPluginData] = [:], unlockedHeight: Int?, reverseHex: String?) throws -> FullTransaction {
         let transaction = try transactionBuilder.buildTransaction(
                 toAddress: address,
                 value: value,
                 feeRate: feeRate,
                 senderPay: senderPay,
                 sortType: sortType,
-                pluginData: pluginData
+                pluginData: pluginData,
+                unlockedHeight: unlockedHeight,
+                reverseHex: reverseHex
         )
 
         try processAndSend(transaction: transaction)
         return transaction
     }
 
-    func create(from unspentOutput: UnspentOutput, to address: String, feeRate: Int, sortType: TransactionDataSortType) throws -> FullTransaction {
-        let transaction = try transactionBuilder.buildTransaction(from: unspentOutput, toAddress: address, feeRate: feeRate, sortType: sortType)
+    func create(from unspentOutput: UnspentOutput, to address: String, feeRate: Int, sortType: TransactionDataSortType, unlockedHeight: Int?, reverseHex: String?) throws -> FullTransaction {
+        let transaction = try transactionBuilder.buildTransaction(from: unspentOutput, toAddress: address, feeRate: feeRate, sortType: sortType,
+                                                                  unlockedHeight: unlockedHeight,
+                                                                  reverseHex: reverseHex)
 
         try processAndSend(transaction: transaction)
         return transaction
     }
 
-    func createRawTransaction(to address: String, value: Int, feeRate: Int, senderPay: Bool, sortType: TransactionDataSortType, pluginData: [UInt8: IPluginData] = [:]) throws -> Data {
+    func createRawTransaction(to address: String, value: Int, feeRate: Int, senderPay: Bool, sortType: TransactionDataSortType, pluginData: [UInt8: IPluginData] = [:], unlockedHeight: Int?, reverseHex: String?) throws -> Data {
         let transaction = try transactionBuilder.buildTransaction(
                 toAddress: address,
                 value: value,
                 feeRate: feeRate,
                 senderPay: senderPay,
                 sortType: sortType,
-                pluginData: pluginData
+                pluginData: pluginData,
+                unlockedHeight: unlockedHeight,
+                reverseHex: reverseHex
         )
 
         return TransactionSerializer.serialize(transaction: transaction)

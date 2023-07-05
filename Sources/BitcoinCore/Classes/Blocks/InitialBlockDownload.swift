@@ -44,7 +44,7 @@ public class InitialBlockDownload {
         self.logger = logger
         resetRequiredDownloadSpeed()
     }
-
+    
     public var publisher: AnyPublisher<InitialBlockDownloadEvent, Never> {
         subject.eraseToAnyPublisher()
     }
