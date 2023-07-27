@@ -23,9 +23,9 @@ extension String {
 public class LineLock: NSObject, ObjectToString {
     public var lastHeight: Int
     public var lockedValue: String
-    public let startMonth: Int
-    public let intervalMonth: Int
-    public let outputSize: Int
+    public var startMonth: Int
+    public var intervalMonth: Int
+    public var outputSize: Int
     
     public init(lastHeight: Int, lockedValue: String, startMonth: Int, intervalMonth: Int, outputSize: Int) {
         self.lastHeight = lastHeight
