@@ -93,5 +93,9 @@ extension InitialSyncer: IInitialSyncer {
     func terminate() {
         tasks = Set()
     }
+    
+    func updateMaxHeight(maxHeight: Int) {
+        (blockDiscovery as? BlockDiscoveryBatch)?.updateMaxHeight(maxHeight: maxHeight)
+    }
 
 }

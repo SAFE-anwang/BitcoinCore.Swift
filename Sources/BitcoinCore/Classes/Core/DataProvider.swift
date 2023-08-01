@@ -48,7 +48,7 @@ class DataProvider {
                 timestamp: block.timestamp
         )
     }
-
+    
 }
 
 extension DataProvider: IBlockchainDataListener {
@@ -137,6 +137,10 @@ extension DataProvider: IDataProvider {
 
         return storage.transactionFullInfo(byHash: hash)?.rawTransaction ??
                 storage.invalidTransaction(byHash: hash)?.rawTransaction
+    }
+    
+    func updateLastBlockInfo() {
+        _lastBlockInfo = storage.lastBlock.map { blockInfo(fromBlock: $0) }
     }
     
     private func hasRightReserveOutput(transaction: FullTransactionForInfo) -> Bool {

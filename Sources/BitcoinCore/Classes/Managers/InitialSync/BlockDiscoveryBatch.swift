@@ -6,7 +6,7 @@ class BlockDiscoveryBatch {
     private let blockHashFetcher: IBlockHashFetcher
     private let publicKeyFetcher: IPublicKeyFetcher
 
-    private let maxHeight: Int
+    private var maxHeight: Int
     private let gapLimit: Int
 
     init(checkpoint: Checkpoint, gapLimit: Int, blockHashFetcher: IBlockHashFetcher, publicKeyFetcher: IPublicKeyFetcher, logger: Logger? = nil) {
@@ -53,6 +53,9 @@ extension BlockDiscoveryBatch: IBlockDiscovery {
         try await fetchRecursive()
     }
 
+    func updateMaxHeight(maxHeight: Int) {
+        self.maxHeight = maxHeight
+    }
 }
 
 class KeyBlockHashBatchInfo {

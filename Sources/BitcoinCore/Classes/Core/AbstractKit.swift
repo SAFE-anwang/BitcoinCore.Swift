@@ -1,4 +1,5 @@
 import Foundation
+import Checkpoints
 
 open class AbstractKit {
     public var bitcoinCore: BitcoinCore
@@ -116,5 +117,9 @@ open class AbstractKit {
     public func rawTransaction(transactionHash: String) -> String? {
         bitcoinCore.rawTransaction(transactionHash: transactionHash)
     }
-
+    
+    // safe update
+    open func updateLastBlockInfo(network: CheckpointData.Network, fallbackDate: CheckpointData.FallbackDate) {
+        bitcoinCore.updateLastBlockInfo(network: network, fallbackDate: fallbackDate)
+    }
 }

@@ -33,6 +33,7 @@ public class InitialBlockDownload {
 
     public var syncedPeers = [IPeer]()
     public var syncPeer: IPeer?
+    
 
     init(blockSyncer: IBlockSyncer, peerManager: IPeerManager, merkleBlockValidator: IMerkleBlockValidator,
          peersQueue: DispatchQueue = DispatchQueue(label: "io.horizontalsystems.bitcoin-core.initial-block-download", qos: .userInitiated),
@@ -176,7 +177,14 @@ extension InitialBlockDownload: IInitialBlockDownload {
     public func isSynced(peer: IPeer) -> Bool {
         syncedState(peer)
     }
-
+    
+    public func updateCheckpoint(checkpoint: Checkpoint) {
+         blockSyncer.updateCheckpoint(checkpoint: checkpoint)
+     }
+    
+    public func stopDownload() {
+        blockSyncer.downloadCompleted()
+    }
 }
 
 extension InitialBlockDownload: IInventoryItemsHandler {
@@ -270,7 +278,6 @@ extension InitialBlockDownload {
             }
         }
     }
-
 }
 
 extension InitialBlockDownload: IMerkleBlockHandler {

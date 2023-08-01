@@ -2,6 +2,7 @@ import Foundation
 import HdWalletKit
 import HsToolKit
 import BigInt
+import Checkpoints
 
 public class BitcoinCore {
     
@@ -124,6 +125,17 @@ extension BitcoinCore {
     public func stop() {
         syncManager.stop()
     }
+    
+    public func updateLastBlockInfo(network: CheckpointData.Network, fallbackDate: CheckpointData.FallbackDate) {
+         dataProvider.updateLastBlockInfo()
+        let checkpoint = BlockSyncer.resolveCheckpointSafe(storage: storage, fallbackDate: fallbackDate)
+         initialBlockDownload.updateCheckpoint(checkpoint: checkpoint)
+         syncManager.updateMaxHeight(maxHeight: lastBlockInfo?.height ?? 0, initBlockHeight: checkpoint.block.height)
+     }
+
+    public func stopDownload() {
+         initialBlockDownload.stopDownload()
+     }
 
 }
 

@@ -1,11 +1,12 @@
 import Foundation
 import HsToolKit
+import Checkpoints
 
 class BlockSyncer {
     weak var listener: IBlockSyncListener?
     private let storage: IStorage
 
-    private let checkpoint: Checkpoint
+    private var checkpoint: Checkpoint
     private let factory: IFactory
     private let transactionProcessor: IBlockTransactionProcessor
     private let blockchain: IBlockchain
@@ -163,7 +164,10 @@ extension BlockSyncer: IBlockSyncer {
     func shouldRequestBlock(withHash hash: Data) -> Bool {
         storage.block(byHash: hash) == nil
     }
-
+    
+    func updateCheckpoint(checkpoint: Checkpoint) {
+        self.checkpoint = checkpoint
+    }
 }
 
 extension BlockSyncer {
@@ -177,11 +181,11 @@ extension BlockSyncer {
 
         return syncer
     }
-
+    
+    
     public static func resolveCheckpoint(network: INetwork, syncMode: BitcoinCore.SyncMode, storage: IStorage) -> Checkpoint {
         let lastBlock = storage.lastBlock
         let checkpoint: Checkpoint
-
         if syncMode == .full {
             checkpoint = network.bip44Checkpoint
         } else {
@@ -207,5 +211,19 @@ extension BlockSyncer {
 
         return checkpoint
     }
+    
+    // safe update
+    public static func resolveCheckpointSafe(storage: IStorage, fallbackDate: CheckpointData.FallbackDate) -> Checkpoint {
+        let lastBlock = storage.lastBlock
+        let checkpoint = try! Checkpoint(safe: fallbackDate)
 
+        if lastBlock == nil {
+            storage.save(block: checkpoint.block)
+
+            for block in checkpoint.additionalBlocks {
+                storage.save(block: block)
+            }
+        }
+        return checkpoint
+    }
 }

@@ -22,6 +22,12 @@ public struct Checkpoint {
         block = try Checkpoint.readBlock(data: checkpointData.block)
         additionalBlocks = try checkpointData.additionalBlocks.map { try Checkpoint.readBlock(data: $0) }
     }
+    
+    public init(safe fallbackDate: CheckpointData.FallbackDate) throws {
+        let checkpointData = try CheckpointData(blockchain: .safe, network: .main, blockType: .bip44, fallbackDate: fallbackDate)
+        block = try Checkpoint.readBlock(data: checkpointData.block)
+        additionalBlocks = try checkpointData.additionalBlocks.map { try Checkpoint.readBlock(data: $0) }
+    }
 
     private static func readBlock(data: Data) throws -> Block {
         let byteStream = ByteStream(data)

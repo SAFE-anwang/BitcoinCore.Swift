@@ -56,6 +56,7 @@ protocol IApiSyncStateManager: AnyObject {
 
 protocol IBlockDiscovery {
     func discoverBlockHashes() async throws -> ([PublicKey], [BlockHash])
+    func updateMaxHeight(maxHeight: Int)
 }
 
 public protocol IOutputStorage {
@@ -293,6 +294,7 @@ protocol IInitialSyncer {
     var delegate: IInitialSyncerDelegate? { get set }
     func sync()
     func terminate()
+    func updateMaxHeight(maxHeight: Int)
 }
 
 public protocol IHasher {
@@ -448,6 +450,7 @@ public protocol IBlockSyncer: AnyObject {
     func add(blockHashes: [Data])
     func handle(merkleBlock: MerkleBlock, maxBlockHeight: Int32) throws
     func shouldRequestBlock(withHash hash: Data) -> Bool
+    func updateCheckpoint(checkpoint: Checkpoint)
 }
 
 protocol ISyncManagerDelegate: AnyObject {
@@ -473,6 +476,8 @@ protocol IDataProvider {
     func transaction(hash: String) -> TransactionInfo?
 
     func rawTransaction(transactionHash: String) -> String?
+    
+    func updateLastBlockInfo()
 }
 
 protocol IDataProviderDelegate: AnyObject {
@@ -552,6 +557,8 @@ public protocol IInitialBlockDownload {
     var publisher: AnyPublisher<InitialBlockDownloadEvent, Never> { get }
     var syncedPeers: [IPeer] { get }
     func isSynced(peer: IPeer) -> Bool
+    func updateCheckpoint(checkpoint: Checkpoint)
+    func stopDownload()
 }
 
 //public protocol ISyncedReadyPeerManager {

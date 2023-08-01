@@ -195,3 +195,12 @@ extension SyncManager: IBlockSyncListener {
     }
 
 }
+
+extension SyncManager {
+    
+    func updateMaxHeight(maxHeight: Int, initBlockHeight: Int) {
+        initialBestBlockHeight = Int32(initBlockHeight)
+        currentBestBlockHeight = Int32(maxHeight)
+        initialSyncer.updateMaxHeight(maxHeight: maxHeight)
+    }
+}
