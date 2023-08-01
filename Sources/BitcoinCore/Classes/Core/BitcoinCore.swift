@@ -4,7 +4,7 @@ import HsToolKit
 import BigInt
 
 public class BitcoinCore {
-    private let storage: IStorage
+    
     private var dataProvider: IDataProvider
     private let publicKeyManager: IPublicKeyManager
     private let watchedTransactionManager: IWatchedTransactionManager
@@ -27,7 +27,7 @@ public class BitcoinCore {
     private let peerManager: IPeerManager
 
     // START: Extending
-
+    public let storage: IStorage
     public let peerGroup: IPeerGroup
     public let initialBlockDownload: IInitialBlockDownload
     public let transactionSyncer: ITransactionSyncer
@@ -121,7 +121,7 @@ extension BitcoinCore {
         syncManager.start()
     }
 
-    func stop() {
+    public func stop() {
         syncManager.stop()
     }
 
