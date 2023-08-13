@@ -34,7 +34,7 @@ public class Output: Record {
     public var scriptType: ScriptType = .unknown
     public var redeemScript: Data? = nil
     public var lockingScriptPayload: Data? = nil
-    var address: String? = nil
+    public var address: String? = nil
     var failedToSpend: Bool = false
 
     public var pluginId: UInt8? = nil
