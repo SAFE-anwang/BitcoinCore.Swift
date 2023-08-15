@@ -26,7 +26,7 @@ extension OutputSetter: IOutputSetter {
                     for index in 0 ... size {
                         let step = 86400 * (_lineLock.startMonth + _lineLock.intervalMonth * index)
                         let unlockedHeight = _lineLock.lastHeight + step
-                        outputs.append(factory.output(withIndex: 0, address: address, value: transaction.recipientValue, publicKey: nil, unlockedHeight: unlockedHeight, reserve: "73616665".hs.hexData))
+                        outputs.append(factory.output(withIndex: 0, address: address, value: Int(_lineLock.lockedValue) ?? 0, publicKey: nil, unlockedHeight: unlockedHeight, reserve: "73616665".hs.hexData))
                     }
                 }
 
