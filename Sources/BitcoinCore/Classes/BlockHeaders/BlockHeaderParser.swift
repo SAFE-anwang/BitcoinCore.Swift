@@ -8,6 +8,7 @@ class BlockHeaderParser: IBlockHeaderParser {
     }
 
     func parse(byteStream: ByteStream) -> BlockHeader {
+
         let version = Int(byteStream.read(Int32.self))
         let previousBlockHeaderHash = byteStream.read(Data.self, count: 32)
         let merkleRoot = byteStream.read(Data.self, count: 32)
@@ -17,11 +18,12 @@ class BlockHeaderParser: IBlockHeaderParser {
 
         let headerData = byteStream.data.prefix(80)
         let headerHash = hasher.hash(data: headerData)
-
+        
+        DogeHeaderParser.decodeHeader(byteStream: byteStream)
+        
         return BlockHeader(
-                version: version, headerHash: headerHash, previousBlockHeaderHash: previousBlockHeaderHash, merkleRoot: merkleRoot,
-                timestamp: timestamp, bits: bits, nonce: nonce
+            version: version, headerHash: headerHash, previousBlockHeaderHash: previousBlockHeaderHash, merkleRoot: merkleRoot,
+            timestamp: timestamp, bits: bits, nonce: nonce
         )
     }
-
 }
