@@ -126,12 +126,20 @@ extension BitcoinCore {
         syncManager.stop()
     }
     
-    public func updateLastBlockInfo(network: CheckpointData.Network, fallbackDate: CheckpointData.FallbackDate) {
-         dataProvider.updateLastBlockInfo()
-        let checkpoint = BlockSyncer.resolveCheckpointSafe(storage: storage, fallbackDate: fallbackDate)
-         initialBlockDownload.updateCheckpoint(checkpoint: checkpoint)
-         syncManager.updateMaxHeight(maxHeight: lastBlockInfo?.height ?? 0, initBlockHeight: checkpoint.block.height)
+    public func updateLastBlockInfo(network: INetwork, syncMode: BitcoinCore.SyncMode) {
+        
+        let checkpoint = BlockSyncer.resolveCheckpoint(network: network, syncMode: syncMode, storage: storage)
+        if let lastBlock = storage.lastBlock, lastBlock.height < checkpoint.block.height {
+            storage.save(block: checkpoint.block)
+            checkpoint.additionalBlocks.forEach { block in
+                storage.save(block: block)
+            }
+        }
+        dataProvider.updateLastBlockInfo()
+        initialBlockDownload.updateCheckpoint(checkpoint: checkpoint)
+        syncManager.updateMaxHeight(maxHeight: lastBlockInfo?.height ?? 0, initBlockHeight: checkpoint.block.height)
      }
+    
 
     public func stopDownload() {
          initialBlockDownload.stopDownload()
