@@ -18,11 +18,9 @@ class PeerAddressManager {
         self.state = state
         self.logger = logger
     }
-
 }
 
 extension PeerAddressManager: IPeerAddressManager {
-
     var ip: String? {
         guard let ip = network.isSafe() ? storage.leastScoreFastestPeerAddressSafe(excludingIps: state.usedIps)?.ip : storage.leastScoreFastestPeerAddress(excludingIps: state.usedIps)?.ip else {
             peerDiscovery.lookup(dnsSeeds: network.dnsSeeds)
@@ -56,7 +54,6 @@ extension PeerAddressManager: IPeerAddressManager {
         }
     }
 
-
     func markFailed(ip: String) {
         queue.sync {
             network.markedFailed(ip: ip)
@@ -67,8 +64,8 @@ extension PeerAddressManager: IPeerAddressManager {
 
     func add(ips: [String]) {
         let newAddresses = ips
-                .filter { !storage.peerAddressExist(address: $0) }
-                .map { PeerAddress(ip: $0, score: 0) }
+            .filter { !storage.peerAddressExist(address: $0) }
+            .map { PeerAddress(ip: $0, score: 0) }
 
         guard !newAddresses.isEmpty else {
             return

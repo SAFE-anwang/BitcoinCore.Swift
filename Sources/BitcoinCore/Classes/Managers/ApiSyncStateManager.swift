@@ -1,16 +1,14 @@
-class ApiSyncStateManager {
+public class ApiSyncStateManager {
     private let storage: IStorage
     private let restoreFromApi: Bool
 
-    init(storage: IStorage, restoreFromApi: Bool) {
+    public init(storage: IStorage, restoreFromApi: Bool) {
         self.storage = storage
         self.restoreFromApi = restoreFromApi
     }
-
 }
 
 extension ApiSyncStateManager: IApiSyncStateManager {
-
     var restored: Bool {
         get {
             guard restoreFromApi else {
@@ -23,5 +21,4 @@ extension ApiSyncStateManager: IApiSyncStateManager {
             storage.set(initialRestored: newValue)
         }
     }
-
 }

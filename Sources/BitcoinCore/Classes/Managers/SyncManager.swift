@@ -6,13 +6,15 @@ class SyncManager {
     weak var delegate: ISyncManagerDelegate?
 
     private let reachabilityManager: ReachabilityManager
-    private let initialSyncer: IInitialSyncer
+    private let apiSyncer: IApiSyncer
     private let peerGroup: IPeerGroup
-    private let apiSyncStateManager: IApiSyncStateManager
+    private let storage: IStorage
+    private let syncMode: BitcoinCore.SyncMode
 
     private var initialBestBlockHeight: Int32
     private var currentBestBlockHeight: Int32
     private var foundTransactionsCount: Int = 0
+    private var forceAddedBlocksTotal: Int = 0
 
     private(set) var syncState: BitcoinCore.KitState = .notSynced(error: BitcoinCore.StateError.notStarted) {
         didSet {
@@ -23,7 +25,7 @@ class SyncManager {
     }
 
     private var syncIdle: Bool {
-        guard case .notSynced(error: let error) = syncState else {
+        guard case let .notSynced(error: error) = syncState else {
             return false
         }
 
@@ -41,31 +43,32 @@ class SyncManager {
         }
     }
 
-    init(reachabilityManager: ReachabilityManager, initialSyncer: IInitialSyncer, peerGroup: IPeerGroup, apiSyncStateManager: IApiSyncStateManager, bestBlockHeight: Int32) {
+    init(reachabilityManager: ReachabilityManager, apiSyncer: IApiSyncer, peerGroup: IPeerGroup, storage: IStorage, syncMode: BitcoinCore.SyncMode, bestBlockHeight: Int32) {
         self.reachabilityManager = reachabilityManager
-        self.initialSyncer = initialSyncer
+        self.apiSyncer = apiSyncer
         self.peerGroup = peerGroup
-        self.apiSyncStateManager = apiSyncStateManager
+        self.storage = storage
+        self.syncMode = syncMode
         initialBestBlockHeight = bestBlockHeight
         currentBestBlockHeight = bestBlockHeight
 
         reachabilityManager.$isReachable
-                .sink { [weak self] in
-                    self?.onChange(isReachable: $0)
-                }
-                .store(in: &cancellables)
+            .sink { [weak self] in
+                self?.onChange(isReachable: $0)
+            }
+            .store(in: &cancellables)
 
         reachabilityManager.connectionTypeChangedPublisher
-                .sink { [weak self] _ in
-                    self?.onConnectionTypeUpdated()
-                }
-                .store(in: &cancellables)
+            .sink { [weak self] _ in
+                self?.onConnectionTypeUpdated()
+            }
+            .store(in: &cancellables)
 
         BackgroundModeObserver.shared.foregroundFromExpiredBackgroundPublisher
-                .sink { [weak self] _ in
-                    self?.onEnterForegroundFromExpiredBackground()
-                }
-                .store(in: &cancellables)
+            .sink { [weak self] _ in
+                self?.onEnterForegroundFromExpiredBackground()
+            }
+            .store(in: &cancellables)
     }
 
     private func onChange(isReachable: Bool) {
@@ -108,24 +111,29 @@ class SyncManager {
 
     private func startInitialSync() {
         syncState = .apiSyncing(transactions: foundTransactionsCount)
-        initialSyncer.sync()
+        apiSyncer.sync()
     }
 
     private func startSync() {
-        if apiSyncStateManager.restored {
-            startPeerGroup()
-        } else {
+        if apiSyncer.willSync {
             startInitialSync()
+        } else {
+            startPeerGroup()
         }
     }
-
 }
 
 extension SyncManager: ISyncManager {
-
     func start() {
-        guard case .notSynced(_) = syncState else {
-            return
+        if case .blockchair = syncMode {
+            switch syncState {
+            case .apiSyncing, .syncing: return
+            default: ()
+            }
+        } else {
+            guard case .notSynced = syncState else {
+                return
+            }
         }
 
         guard reachabilityManager.isReachable else {
@@ -139,7 +147,7 @@ extension SyncManager: ISyncManager {
     func stop() {
         switch syncState {
         case .apiSyncing:
-            initialSyncer.terminate()
+            apiSyncer.terminate()
         case .syncing, .synced:
             peerGroup.stop()
         default: ()
@@ -147,34 +155,36 @@ extension SyncManager: ISyncManager {
 
         syncState = .notSynced(error: BitcoinCore.StateError.notStarted)
     }
-
 }
 
-extension SyncManager: IInitialSyncerDelegate {
-
+extension SyncManager: IApiSyncerListener {
     func onSyncSuccess() {
-        apiSyncStateManager.restored = true
-        startPeerGroup()
+        forceAddedBlocksTotal = storage.apiBlockHashesCount
+
+        if peerGroup.started {
+            if foundTransactionsCount > 0 {
+                foundTransactionsCount = 0
+                syncState = .syncing(progress: 0)
+                peerGroup.refresh()
+            } else {
+                syncState = .synced
+            }
+        } else {
+            startPeerGroup()
+        }
     }
 
     func onSyncFailed(error: Error) {
         syncState = .notSynced(error: error)
     }
 
-}
-
-
-extension SyncManager: IApiSyncListener {
-
     func transactionsFound(count: Int) {
         foundTransactionsCount += count
         syncState = .apiSyncing(transactions: foundTransactionsCount)
     }
-
 }
 
 extension SyncManager: IBlockSyncListener {
-
     func blocksSyncFinished() {
         syncState = .synced
     }
@@ -194,6 +204,21 @@ extension SyncManager: IBlockSyncListener {
         }
     }
 
+    func blockForceAdded() {
+        guard case .blockchair = syncMode else {
+            syncState = .syncing(progress: 0)
+            return
+        }
+
+        let forceAddedBlocks = forceAddedBlocksTotal - storage.apiBlockHashesCount
+
+        if forceAddedBlocks >= forceAddedBlocksTotal {
+            apiSyncer.syncLastBlock()
+            syncState = .synced
+        } else {
+            syncState = .syncing(progress: Double(forceAddedBlocks) / Double(forceAddedBlocksTotal))
+        }
+    }
 }
 
 extension SyncManager {
@@ -201,6 +226,6 @@ extension SyncManager {
     func updateMaxHeight(maxHeight: Int, initBlockHeight: Int) {
         initialBestBlockHeight = Int32(initBlockHeight)
         currentBestBlockHeight = Int32(maxHeight)
-        initialSyncer.updateMaxHeight(maxHeight: maxHeight)
+        apiSyncer.updateMaxHeight(maxHeight: maxHeight)
     }
 }

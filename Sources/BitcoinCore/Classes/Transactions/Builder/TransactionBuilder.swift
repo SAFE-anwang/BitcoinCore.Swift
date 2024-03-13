@@ -12,7 +12,6 @@ class TransactionBuilder {
         self.outputSetter = outputSetter
         self.signer = signer
     }
-
 }
 
 extension TransactionBuilder: ITransactionBuilder {
@@ -56,5 +55,4 @@ extension TransactionBuilder: ITransactionBuilder {
 
         return mutableTransaction.build()
     }
-
 }

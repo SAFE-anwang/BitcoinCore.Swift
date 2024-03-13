@@ -2,22 +2,21 @@ import Foundation
 import HsCryptoKit
 import HsExtensions
 
-public class TransactionSerializer {
-
-    static public func serialize(transaction: FullTransaction, withoutWitness: Bool = false) -> Data {
+public enum TransactionSerializer {
+    public static func serialize(transaction: FullTransaction, withoutWitness: Bool = false) -> Data {
         let header = transaction.header
         var data = Data()
 
         data += UInt32(header.version)
-        if header.segWit && !withoutWitness {
-            data += UInt8(0)       // marker 0x00
-            data += UInt8(1)       // flag 0x01
+        if header.segWit, !withoutWitness {
+            data += UInt8(0) // marker 0x00
+            data += UInt8(1) // flag 0x01
         }
         data += VarInt(transaction.inputs.count).serialized()
         data += transaction.inputs.flatMap { TransactionInputSerializer.serialize(input: $0) }
         data += VarInt(transaction.outputs.count).serialized()
         data += transaction.outputs.flatMap { TransactionOutputSerializer.serialize(output: $0) }
-        if header.segWit && !withoutWitness {
+        if header.segWit, !withoutWitness {
             data += transaction.inputs.flatMap {
                 DataListSerializer.serialize(dataList: $0.witnessData)
             }
@@ -27,10 +26,10 @@ public class TransactionSerializer {
         return data
     }
 
-    static public func serializedForSignature(transaction: Transaction, inputsToSign: [InputToSign], outputs: [Output], inputIndex: Int, forked: Bool = false) throws -> Data {
+    public static func serializedForSignature(transaction: Transaction, inputsToSign: [InputToSign], outputs: [Output], inputIndex: Int, forked: Bool = false) throws -> Data {
         var data = Data()
 
-        if forked {     // use bip143 for new transaction digest algorithm
+        if forked { // use bip143 for new transaction digest algorithm
             data += UInt32(transaction.version)
 
             let hashPrevouts = try inputsToSign.flatMap { input in
@@ -80,11 +79,11 @@ public class TransactionSerializer {
         return data
     }
 
-    static public func serializedForTaprootSignature(transaction: Transaction, inputsToSign: [InputToSign], outputs: [Output], inputIndex: Int) throws -> Data {
+    public static func serializedForTaprootSignature(transaction: Transaction, inputsToSign: [InputToSign], outputs: [Output], inputIndex: Int) throws -> Data {
         var data = Data()
 
         data += UInt8(0)
-        data += UInt8(0)   // SIGHASH_DEFAULT
+        data += UInt8(0) // SIGHASH_DEFAULT
         data += UInt32(transaction.version)
         data += UInt32(transaction.lockTime)
 
@@ -116,7 +115,7 @@ public class TransactionSerializer {
         let hashOutputs = outputs.flatMap { TransactionOutputSerializer.serialize(output: $0) }
         data += Crypto.sha256(Data(hashOutputs))
 
-        data += UInt8(0)   // spendType (no annex, no scriptPath)
+        data += UInt8(0) // spendType (no annex, no scriptPath)
         data += UInt32(inputIndex)
 
         return data
@@ -127,6 +126,7 @@ public class TransactionSerializer {
     }
 
     static public func deserialize(byteStream: ByteStream, isSafe: Bool = false) -> FullTransaction {
+
         let transaction = Transaction()
         var inputs = [Input]()
         var outputs = [Output]()
@@ -142,7 +142,7 @@ public class TransactionSerializer {
         }
 
         let txInCount = byteStream.read(VarInt.self)
-        for _ in 0..<Int(txInCount.underlyingValue) {
+        for _ in 0 ..< Int(txInCount.underlyingValue) {
             inputs.append(TransactionInputSerializer.deserialize(byteStream: byteStream))
         }
 
@@ -157,11 +157,10 @@ public class TransactionSerializer {
                 output.index = i
                 outputs.append(output)
             }
-
         }
 
         if transaction.segWit {
-            for i in 0..<Int(txInCount.underlyingValue) {
+            for i in 0 ..< Int(txInCount.underlyingValue) {
                 inputs[i].witnessData = DataListSerializer.deserialize(byteStream: byteStream)
             }
         }
@@ -170,5 +169,4 @@ public class TransactionSerializer {
 
         return FullTransaction(header: transaction, inputs: inputs, outputs: outputs)
     }
-
 }

@@ -20,11 +20,9 @@ public enum ScriptType: Int, DatabaseValueConvertible {
     var witness: Bool {
         self == .p2wpkh || self == .p2wpkhSh || self == .p2wsh || self == .p2tr
     }
-
 }
 
 public class Output: Record {
-
     public var value: Int
     public var lockingScript: Data
     public var index: Int
@@ -46,16 +44,16 @@ public class Output: Record {
     public var reserve: Data? = nil
     
     public func set(publicKey: PublicKey) {
-        self.publicKeyPath = publicKey.path
-        self.changeOutput = !publicKey.external
+        publicKeyPath = publicKey.path
+        changeOutput = !publicKey.external
     }
 
     public init(withValue value: Int, index: Int, lockingScript script: Data, transactionHash: Data = Data(), type: ScriptType = .unknown, redeemScript: Data? = nil, address: String? = nil, lockingScriptPayload: Data? = nil, publicKey: PublicKey? = nil, unlockedHeight: Int? = nil, reserve: Data? = nil) {
         self.value = value
-        self.lockingScript = script
+        lockingScript = script
         self.index = index
         self.transactionHash = transactionHash
-        self.scriptType = type
+        scriptType = type
         self.redeemScript = redeemScript
         self.address = address
         self.lockingScriptPayload = lockingScriptPayload
@@ -66,7 +64,7 @@ public class Output: Record {
         
         super.init()
 
-        if let publicKey = publicKey {
+        if let publicKey {
             set(publicKey: publicKey)
         }
     }
@@ -94,7 +92,7 @@ public class Output: Record {
         case reserve // SAFE
     }
 
-    required init(row: Row) {
+    required init(row: Row) throws {
         value = row[Columns.value]
         lockingScript = row[Columns.lockingScript]
         index = row[Columns.index]
@@ -111,11 +109,11 @@ public class Output: Record {
         
         unlockedHeight = row[Columns.unlockedHeight]
         reserve = row[Columns.reserve]
-        
-        super.init(row: row)
+
+        try super.init(row: row)
     }
 
-    override open func encode(to container: inout PersistenceContainer) {
+    override open func encode(to container: inout PersistenceContainer) throws {
         container[Columns.value] = value
         container[Columns.lockingScript] = lockingScript
         container[Columns.index] = index
@@ -133,5 +131,4 @@ public class Output: Record {
         container[Columns.unlockedHeight] = unlockedHeight
         container[Columns.reserve] = reserve
     }
-
 }

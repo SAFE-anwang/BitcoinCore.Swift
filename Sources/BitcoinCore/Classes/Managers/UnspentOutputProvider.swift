@@ -8,12 +8,12 @@ class UnspentOutputProvider {
 
         // Output must have a public key, that is, must belong to the user
         return storage.unspentOutputs()
-                .filter({ unspentOutput in
-                    // If a transaction is an outgoing transaction, then it can be used
-                    // even if it's not included in a block yet
-                    if unspentOutput.transaction.isOutgoing {
-                        return true
-                    }
+            .filter { unspentOutput in
+                // If a transaction is an outgoing transaction, then it can be used
+                // even if it's not included in a block yet
+                if unspentOutput.transaction.isOutgoing {
+                    return true
+                }
 
                     // If a transaction is an incoming transaction, then it can be used
                     // only if it's included in a block and has enough number of confirmations
@@ -31,8 +31,8 @@ class UnspentOutputProvider {
                         }
                     }
 
-                    return blockHeight <= lastBlockHeight - confirmationsThreshold + 1
-                })
+                return blockHeight <= lastBlockHeight - confirmationsThreshold + 1
+            }
     }
 
     private var unspendableUtxo: [UnspentOutput] {
@@ -53,7 +53,6 @@ class UnspentOutputProvider {
 }
 
 extension UnspentOutputProvider: IUnspentOutputProvider {
-
     var spendableUtxo: [UnspentOutput] {
         let lastBlockHeight = storage.lastBlock?.height ?? 0
         return confirmedUtxo.filter {
@@ -63,16 +62,13 @@ extension UnspentOutputProvider: IUnspentOutputProvider {
             return pluginManager.isSpendable(unspentOutput: $0)
         }
     }
-
 }
 
 extension UnspentOutputProvider: IBalanceProvider {
-
     var balanceInfo: BalanceInfo {
-        let spendable =  spendableUtxo.map { $0.output.value }.reduce(0, +)
-        let unspendable = unspendableUtxo.map { $0.output.value }.reduce(0, +)
+        let spendable = spendableUtxo.map(\.output.value).reduce(0, +)
+        let unspendable = unspendableUtxo.map(\.output.value).reduce(0, +)
 
         return BalanceInfo(spendable: spendable, unspendable: unspendable)
     }
-
 }

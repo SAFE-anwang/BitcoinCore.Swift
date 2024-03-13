@@ -15,7 +15,7 @@ public class PeerAddress: Record {
     }
 
     override open class var databaseTableName: String {
-        return "peerAddresses"
+        "peerAddresses"
     }
 
     enum Columns: String, ColumnExpression {
@@ -25,19 +25,20 @@ public class PeerAddress: Record {
         case lastBlock
     }
 
-    required init(row: Row) {
+    required init(row: Row) throws {
         ip = row[Columns.ip]
         score = row[Columns.score]
         connectionTime = row[Columns.connectionTime]
+
         lastBlock = row[Columns.lastBlock]
-        super.init(row: row)
+        
+        try super.init(row: row)
     }
 
-    override open func encode(to container: inout PersistenceContainer) {
+    override open func encode(to container: inout PersistenceContainer) throws {
         container[Columns.ip] = ip
         container[Columns.score] = score
         container[Columns.connectionTime] = connectionTime
         container[Columns.lastBlock] = lastBlock
     }
-
 }

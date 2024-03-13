@@ -8,7 +8,7 @@ class BlockchainState: Record {
     var initialRestored: Bool?
 
     override class var databaseTableName: String {
-        return "blockchainStates"
+        "blockchainStates"
     }
 
     override init() {
@@ -20,15 +20,14 @@ class BlockchainState: Record {
         case initialRestored
     }
 
-    required init(row: Row) {
+    required init(row: Row) throws {
         initialRestored = row[Columns.initialRestored]
 
-        super.init(row: row)
+        try super.init(row: row)
     }
 
-    override func encode(to container: inout PersistenceContainer) {
+    override func encode(to container: inout PersistenceContainer) throws {
         container[Columns.primaryKey] = primaryKey
         container[Columns.initialRestored] = initialRestored
     }
-
 }

@@ -2,9 +2,9 @@ import Foundation
 import GRDB
 
 public class InvalidTransaction: Transaction {
-
     init(uid: String, dataHash: Data, version: Int, lockTime: Int, timestamp: Int, order: Int, blockHash: Data?, isMine: Bool, isOutgoing: Bool, status: TransactionStatus,
-         segWit: Bool, conflictingTxHash: Data?, transactionInfoJson: Data, rawTransaction: String) {
+         segWit: Bool, conflictingTxHash: Data?, transactionInfoJson: Data, rawTransaction: String)
+    {
         super.init()
 
         self.uid = uid
@@ -23,13 +23,11 @@ public class InvalidTransaction: Transaction {
         self.rawTransaction = rawTransaction
     }
 
-    required init(row: Row) {
-        super.init(row: row)
+    required init(row: Row) throws {
+        try super.init(row: row)
     }
-
 
     override open class var databaseTableName: String {
         "invalid_transactions"
     }
-
 }

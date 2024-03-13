@@ -66,7 +66,6 @@ class BlockSyncer {
 }
 
 extension BlockSyncer: IBlockSyncer {
-
     func prepareForDownload() {
         do {
             try handlePartialBlocks()
@@ -86,6 +85,10 @@ extension BlockSyncer: IBlockSyncer {
         if state.iterationHasPartialBlocks {
             try? handlePartialBlocks()
         }
+    }
+    
+    func getBlockHashes(limit: Int) -> [BlockHash] {
+        storage.blockHashesSortedBySequenceAndHeight(limit: limit)
     }
 
     func downloadCompleted() {

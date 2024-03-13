@@ -12,7 +12,7 @@ public extension INetwork {
     var lastCheckpoint: Checkpoint {
         try! Checkpoint(bundleName: bundleName, network: String(describing: type(of: self)), blockType: .last)
     }
-    
+
     func isMainNode(ip: String?) -> Bool {
         return true
     }
@@ -28,5 +28,4 @@ public extension INetwork {
     func isSafe() -> Bool {
         return false
     }
-
 }

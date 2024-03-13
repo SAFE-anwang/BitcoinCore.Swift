@@ -8,11 +8,9 @@ class OutputSetter {
         self.outputSorterFactory = outputSorterFactory
         self.factory = factory
     }
-
 }
 
 extension OutputSetter: IOutputSetter {
-
     func setOutputs(to transaction: MutableTransaction, sortType: TransactionDataSortType) {
         var outputs = [Output]()
         
@@ -81,5 +79,4 @@ extension OutputSetter: IOutputSetter {
 
         transaction.outputs = sorted
     }
-
 }

@@ -16,20 +16,19 @@ public class Transaction: Record {
     public var status: TransactionStatus = .relayed
     public var segWit: Bool = false
     public var conflictingTxHash: Data? = nil
-    public var transactionInfoJson: Data = Data()
+    public var transactionInfoJson: Data = .init()
     public var rawTransaction: String? = nil
 
     public init(version: Int = 0, lockTime: Int = 0, timestamp: Int? = nil) {
         self.version = version
         self.lockTime = lockTime
         self.timestamp = timestamp ?? Int(Date().timeIntervalSince1970)
-        self.order = 0
-        self.dataHash = Data()
-        self.uid = UUID().uuidString
+        order = 0
+        dataHash = Data()
+        uid = UUID().uuidString
 
         super.init()
     }
-
 
     override open class var databaseTableName: String {
         "transactions"
@@ -52,7 +51,7 @@ public class Transaction: Record {
         case rawTransaction
     }
 
-    required init(row: Row) {
+    required init(row: Row) throws {
         uid = row[Columns.uid]
         dataHash = row[Columns.dataHash]
         version = row[Columns.version]
@@ -68,10 +67,10 @@ public class Transaction: Record {
         transactionInfoJson = row[Columns.transactionInfoJson]
         rawTransaction = row[Columns.rawTransaction]
 
-        super.init(row: row)
+        try super.init(row: row)
     }
 
-    override open func encode(to container: inout PersistenceContainer) {
+    override open func encode(to container: inout PersistenceContainer) throws {
         container[Columns.uid] = uid
         container[Columns.dataHash] = dataHash
         container[Columns.version] = version
@@ -87,5 +86,4 @@ public class Transaction: Record {
         container[Columns.transactionInfoJson] = transactionInfoJson
         container[Columns.rawTransaction] = rawTransaction
     }
-
 }

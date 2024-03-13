@@ -28,7 +28,6 @@ class TransactionCreator {
 
         transactionSender.send(pendingTransaction: transaction)
     }
-
 }
 
 extension TransactionCreator: ITransactionCreator {
@@ -72,5 +71,4 @@ extension TransactionCreator: ITransactionCreator {
 
         return TransactionSerializer.serialize(transaction: transaction)
     }
-
 }
