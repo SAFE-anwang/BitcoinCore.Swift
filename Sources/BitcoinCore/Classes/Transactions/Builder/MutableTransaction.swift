@@ -11,6 +11,7 @@ public class MutableTransaction {
 
     public var recipientAddress: Address!
     public var recipientValue = 0
+    var memo: String?
     var changeAddress: Address?
     var changeValue = 0
 

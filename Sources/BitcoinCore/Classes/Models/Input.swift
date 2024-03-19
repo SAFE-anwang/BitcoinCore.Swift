@@ -60,6 +60,12 @@ public class Input: Record {
     }
 }
 
+extension Input {
+    var rbfEnabled: Bool {
+        sequence < 0xFFFFFFFE
+    }
+}
+
 enum SerializationError: Error {
     case noPreviousOutput
     case noPreviousTransaction

@@ -51,11 +51,11 @@ public class TransactionSizeCalculator {
 }
 
 extension TransactionSizeCalculator: ITransactionSizeCalculator {
-    public func transactionSize(previousOutputs: [Output], outputScriptTypes: [ScriptType]) -> Int { // in real bytes upped to int
-        transactionSize(previousOutputs: previousOutputs, outputScriptTypes: outputScriptTypes, pluginDataOutputSize: 0)
+    public func transactionSize(previousOutputs: [Output], outputScriptTypes: [ScriptType], memo: String?) -> Int { // in real bytes upped to int
+        transactionSize(previousOutputs: previousOutputs, outputScriptTypes: outputScriptTypes, memo: memo, pluginDataOutputSize: 0)
     }
 
-    public func transactionSize(previousOutputs: [Output], outputScriptTypes: [ScriptType], pluginDataOutputSize: Int) -> Int { // in real bytes upped to int
+    public func transactionSize(previousOutputs: [Output], outputScriptTypes: [ScriptType], memo: String?, pluginDataOutputSize: Int) -> Int { // in real bytes upped to int
         var segWit = false
         var inputWeight = 0
 
@@ -66,7 +66,7 @@ extension TransactionSizeCalculator: ITransactionSizeCalculator {
             }
         }
 
-        previousOutputs.forEach { previousOutput in
+        for previousOutput in previousOutputs {
             inputWeight += inputSize(output: previousOutput) * 4 // to vbytes
             if segWit {
                 inputWeight += witnessSize(type: previousOutput.scriptType)
@@ -74,6 +74,10 @@ extension TransactionSizeCalculator: ITransactionSizeCalculator {
         }
 
         var outputWeight: Int = outputScriptTypes.reduce(0) { $0 + outputSize(type: $1) } * 4 // in vbytes
+        if let memo, let memoData = memo.data(using: .utf8) {
+            let lockingScript = Data([OpCode.op_return]) + OpCode.push(memoData)
+            outputWeight += outputSize(lockingScriptSize: lockingScript.count) * 4
+        }
         if pluginDataOutputSize > 0 {
             outputWeight += outputSize(lockingScriptSize: pluginDataOutputSize) * 4
         }
@@ -113,5 +117,47 @@ extension TransactionSizeCalculator: ITransactionSizeCalculator {
 
     public func toBytes(fee: Int) -> Int {
         fee / 4 + (fee % 4 == 0 ? 0 : 1)
+    }
+
+    public func transactionSize(previousOutputs: [Output], outputs: [Output]) throws -> Int {
+        var segWit = false
+        var inputWeight = 0
+
+        for previousOutput in previousOutputs {
+            if previousOutput.scriptType.witness {
+                segWit = true
+                break
+            }
+        }
+
+        for previousOutput in previousOutputs {
+            inputWeight += inputSize(output: previousOutput) * 4 // to vbytes
+            if segWit {
+                inputWeight += witnessSize(type: previousOutput.scriptType)
+            }
+        }
+
+        var outputWeight = 0
+        for output in outputs {
+            switch output.scriptType {
+            case .nullData:
+                outputWeight += outputSize(lockingScriptSize: output.lockingScript.count) * 4
+            case .unknown, .p2multi:
+                throw CalculationError.unsupportedOutputScriptType
+
+            default:
+                outputWeight += outputSize(type: output.scriptType) * 4
+            }
+        }
+
+        let txWeight = segWit ? TransactionSizeCalculator.witnessTx : TransactionSizeCalculator.legacyTx
+
+        return toBytes(fee: txWeight + inputWeight + outputWeight)
+    }
+}
+
+extension TransactionSizeCalculator {
+    enum CalculationError: Error {
+        case unsupportedOutputScriptType
     }
 }

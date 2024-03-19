@@ -64,7 +64,7 @@ public struct OutputWithPublicKey {
     let spendingBlockHeight: Int?
 }
 
-struct InputWithPreviousOutput {
+public struct InputWithPreviousOutput {
     let input: Input
     let previousOutput: Output?
 }
@@ -85,6 +85,45 @@ public struct UnspentOutput {
         self.publicKey = publicKey
         self.transaction = transaction
         self.blockHeight = blockHeight
+    }
+
+    public var info: UnspentOutputInfo {
+        .init(
+            outputIndex: output.index,
+            transactionHash: output.transactionHash,
+            timestamp: TimeInterval(transaction.timestamp),
+            address: output.address,
+            value: output.value
+        )
+    }
+}
+
+public struct UnspentOutputInfo: Hashable, Equatable {
+    public var outputIndex: Int
+    public var transactionHash: Data
+    public let timestamp: TimeInterval
+    public let address: String?
+    public let value: Int
+
+    public static func ==(lhs: UnspentOutputInfo, rhs: UnspentOutputInfo) -> Bool {
+        lhs.outputIndex == rhs.outputIndex &&
+        lhs.transactionHash == rhs.transactionHash
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(outputIndex)
+        hasher.combine(transactionHash)
+    }
+}
+
+public extension Array where Element == UnspentOutputInfo {
+    func outputs(from outputs: [UnspentOutput]) -> [UnspentOutput] {
+        let selectedKeys = map { ($0.outputIndex, $0.transactionHash) }
+        return outputs.filter { output in
+            selectedKeys.contains { i, hash in
+                i == output.output.index && hash == output.output.transactionHash
+            }
+        }
     }
 }
 

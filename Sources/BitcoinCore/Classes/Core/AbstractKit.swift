@@ -42,24 +42,28 @@ open class AbstractKit {
         bitcoinCore.transaction(hash: hash)
     }
 
-    open func sendSafe(to address: String, value: Int, feeRate: Int, sortType: TransactionDataSortType, pluginData: [UInt8: IPluginData] = [:], unlockedHeight: Int?, reverseHex: String?) throws -> FullTransaction {
-        try bitcoinCore.send(to: address, value: value, feeRate: feeRate, sortType: sortType, pluginData: pluginData, unlockedHeight: unlockedHeight ?? 0, reverseHex: reverseHex)
+    open func sendSafe(to address: String, memo: String?, value: Int, feeRate: Int, sortType: TransactionDataSortType, rbfEnabled: Bool, unspentOutputs: [UnspentOutputInfo]? = nil, pluginData: [UInt8: IPluginData] = [:], unlockedHeight: Int?, reverseHex: String?) throws -> FullTransaction {
+        try bitcoinCore.send(to: address, memo: memo, value: value, feeRate: feeRate, sortType: sortType, rbfEnabled: rbfEnabled, unspentOutputs: unspentOutputs, pluginData: pluginData, unlockedHeight: unlockedHeight ?? 0, reverseHex: reverseHex)
     }
     
-    open func send(to address: String, value: Int, feeRate: Int, sortType: TransactionDataSortType, pluginData: [UInt8: IPluginData] = [:]) throws -> FullTransaction {
-        try bitcoinCore.send(to: address, value: value, feeRate: feeRate, sortType: sortType, pluginData: pluginData, unlockedHeight: nil, reverseHex: nil)
-    }
-    
-    public func send(to hash: Data, scriptType: ScriptType, value: Int, feeRate: Int, sortType: TransactionDataSortType) throws -> FullTransaction {
-        try bitcoinCore.send(to: hash, scriptType: scriptType, value: value, feeRate: feeRate, sortType: sortType)
+    open func send(to address: String, memo: String?, value: Int, feeRate: Int, sortType: TransactionDataSortType, rbfEnabled: Bool, unspentOutputs: [UnspentOutputInfo]? = nil, pluginData: [UInt8: IPluginData] = [:]) throws -> FullTransaction {
+        try bitcoinCore.send(to: address, memo: memo, value: value, feeRate: feeRate, sortType: sortType, rbfEnabled: rbfEnabled, unspentOutputs: unspentOutputs, pluginData: pluginData)
     }
 
-    public func redeem(from unspentOutput: UnspentOutput, to address: String, feeRate: Int, sortType: TransactionDataSortType) throws -> FullTransaction {
-        try bitcoinCore.redeem(from: unspentOutput, to: address, feeRate: feeRate, sortType: sortType)
+    public func send(to hash: Data, memo: String?, scriptType: ScriptType, value: Int, feeRate: Int, sortType: TransactionDataSortType, rbfEnabled: Bool, unspentOutputs: [UnspentOutputInfo]?) throws -> FullTransaction {
+        try bitcoinCore.send(to: hash, memo: memo, scriptType: scriptType, value: value, feeRate: feeRate, sortType: sortType, rbfEnabled: rbfEnabled, unspentOutputs: unspentOutputs)
     }
 
-    open func createRawTransaction(to address: String, value: Int, feeRate: Int, sortType: TransactionDataSortType, pluginData: [UInt8: IPluginData] = [:]) throws -> Data {
-        try bitcoinCore.createRawTransaction(to: address, value: value, feeRate: feeRate, sortType: sortType, pluginData: pluginData)
+    public func send(to hash: Data, memo: String?, scriptType: ScriptType, value: Int, feeRate: Int, sortType: TransactionDataSortType, rbfEnabled: Bool) throws -> FullTransaction {
+        try bitcoinCore.send(to: hash, memo: memo, scriptType: scriptType, value: value, feeRate: feeRate, sortType: sortType, rbfEnabled: rbfEnabled, unspentOutputs: nil)
+    }
+
+    public func redeem(from unspentOutput: UnspentOutput, to address: String, memo: String?, feeRate: Int, sortType: TransactionDataSortType, rbfEnabled: Bool) throws -> FullTransaction {
+        try bitcoinCore.redeem(from: unspentOutput, memo: memo, to: address, feeRate: feeRate, sortType: sortType, rbfEnabled: rbfEnabled)
+    }
+
+    open func createRawTransaction(to address: String, memo: String?, value: Int, feeRate: Int, sortType: TransactionDataSortType, rbfEnabled: Bool, unspentOutputs: [UnspentOutput]? = nil, pluginData: [UInt8: IPluginData] = [:]) throws -> Data {
+        try bitcoinCore.createRawTransaction(to: address, memo: memo, value: value, feeRate: feeRate, sortType: sortType, rbfEnabled: rbfEnabled, unspentOutputs: unspentOutputs, pluginData: pluginData)
     }
 
     open func validate(address: String, pluginData: [UInt8: IPluginData] = [:]) throws {
@@ -70,12 +74,13 @@ open class AbstractKit {
         bitcoinCore.parse(paymentAddress: paymentAddress)
     }
 
-    open func fee(for value: Int, toAddress: String? = nil, feeRate: Int, pluginData: [UInt8: IPluginData] = [:]) throws -> Int {
-        try bitcoinCore.fee(for: value, toAddress: toAddress, feeRate: feeRate, pluginData: pluginData)
+    open func sendInfo(for value: Int, toAddress: String? = nil, memo: String?, feeRate: Int, unspentOutputs: [UnspentOutputInfo]?, pluginData: [UInt8: IPluginData] = [:]) throws -> BitcoinSendInfo {
+        let outputs = unspentOutputs.map { $0.outputs(from: bitcoinCore.unspentOutputs) }
+        return try bitcoinCore.sendInfo(for: value, toAddress: toAddress, memo: memo, feeRate: feeRate, unspentOutputs: outputs, pluginData: pluginData)
     }
 
-    open func maxSpendableValue(toAddress: String? = nil, feeRate: Int, pluginData: [UInt8: IPluginData] = [:]) throws -> Int {
-        try bitcoinCore.maxSpendableValue(toAddress: toAddress, feeRate: feeRate, pluginData: pluginData)
+    open func maxSpendableValue(toAddress: String? = nil, memo: String?, feeRate: Int, unspentOutputs: [UnspentOutputInfo]?, pluginData: [UInt8: IPluginData] = [:]) throws -> Int {
+        try bitcoinCore.maxSpendableValue(toAddress: toAddress, memo: memo, feeRate: feeRate, unspentOutputs: unspentOutputs, pluginData: pluginData)
     }
 
     open func maxSpendLimit(pluginData: [UInt8: IPluginData]) throws -> Int? {
@@ -86,8 +91,16 @@ open class AbstractKit {
         try bitcoinCore.minSpendableValue(toAddress: toAddress)
     }
 
+    open var unspentOutputs: [UnspentOutputInfo] {
+        bitcoinCore.unspentOutputs.map { $0.info }
+    }
+
     open func receiveAddress() -> String {
         bitcoinCore.receiveAddress()
+    }
+
+    open func usedAddresses(change: Bool) -> [UsedAddress] {
+        bitcoinCore.usedAddresses(change: change)
     }
 
     open func changePublicKey() throws -> PublicKey {
@@ -117,9 +130,38 @@ open class AbstractKit {
     public func rawTransaction(transactionHash: String) -> String? {
         bitcoinCore.rawTransaction(transactionHash: transactionHash)
     }
+
     
     // safe update
     open func updateLastBlockInfo(network: INetwork, syncMode: BitcoinCore.SyncMode) {
         bitcoinCore.updateLastBlockInfo(network: network, syncMode: syncMode)
+        
+    }
+
+    public func speedUpTransaction(transactionHash: String, minFee: Int) throws -> ReplacementTransaction {
+        try bitcoinCore.replacementTransaction(transactionHash: transactionHash, minFee: minFee, type: .speedUp)
+    }
+
+    public func cancelTransaction(transactionHash: String, minFee: Int) throws -> ReplacementTransaction {
+        let publicKey = try bitcoinCore.receivePublicKey()
+        return try bitcoinCore.replacementTransaction(transactionHash: transactionHash, minFee: minFee, type: .cancel(address: bitcoinCore.address(from: publicKey), publicKey: publicKey))
+    }
+
+    public func send(replacementTransaction: ReplacementTransaction) throws -> FullTransaction {
+        try bitcoinCore.send(replacementTransaction: replacementTransaction)
+    }
+
+    public func speedUpTransactionInfo(transactionHash: String) -> (originalTransactionSize: Int, feeRange: Range<Int>)? {
+        bitcoinCore.replacmentTransactionInfo(transactionHash: transactionHash, type: .speedUp)
+    }
+
+    public func cancelTransactionInfo(transactionHash: String) -> (originalTransactionSize: Int, feeRange: Range<Int>)? {
+        if let receivePublicKey = try? bitcoinCore.receivePublicKey(),
+           let address = try? bitcoinCore.address(from: receivePublicKey)
+        {
+            return bitcoinCore.replacmentTransactionInfo(transactionHash: transactionHash, type: .cancel(address: address, publicKey: receivePublicKey))
+        } else {
+            return nil
+        }
     }
 }

@@ -323,6 +323,29 @@ open class GrdbStorage {
             }
         }
 
+        migrator.registerMigration("addSequenceToInputPrimaryKey") { db in
+            let inputs = try Input.fetchAll(db)
+            try db.drop(table: Input.databaseTableName)
+
+            try db.create(table: Input.databaseTableName) { t in
+                t.column(Input.Columns.previousOutputTxHash.name, .text).notNull()
+                t.column(Input.Columns.previousOutputIndex.name, .integer).notNull()
+                t.column(Input.Columns.signatureScript.name, .blob).notNull()
+                t.column(Input.Columns.sequence.name, .integer).notNull()
+                t.column(Input.Columns.transactionHash.name, .text).notNull()
+                t.column(Input.Columns.keyHash.name, .blob)
+                t.column(Input.Columns.address.name, .text)
+                t.column(Input.Columns.witnessData.name, .blob)
+
+                t.primaryKey([Input.Columns.previousOutputTxHash.name, Input.Columns.previousOutputIndex.name, Input.Columns.sequence.name], onConflict: .abort)
+                t.foreignKey([Input.Columns.transactionHash.name], references: Transaction.databaseTableName, columns: [Transaction.Columns.dataHash.name], onDelete: .cascade, onUpdate: .cascade, deferred: true)
+            }
+
+            for input in inputs {
+                try input.save(db)
+            }
+        }
+
         return migrator
     }
 
@@ -843,6 +866,82 @@ extension GrdbStorage: IStorage {
         }
     }
 
+    public func transactions(hashes: [Data]) -> [Transaction] {
+        var transactions = [Transaction]()
+
+        try! dbPool.read { db in
+            for transactionHashChunks in hashes.chunked(into: 999) {
+                try transactions.append(contentsOf: Transaction.filter(transactionHashChunks.contains(Transaction.Columns.dataHash)).fetchAll(db))
+            }
+        }
+
+        return transactions
+    }
+
+    public func fullTransactions(from transactions: [Transaction]) -> [FullTransaction] {
+        var inputs = [Input]()
+        var outputs = [Output]()
+        var metadata = [TransactionMetadata]()
+        let hashes = transactions.map { $0.dataHash }
+
+        try! dbPool.read { db in
+            for transactionHashChunks in hashes.chunked(into: 999) {
+                try inputs.append(contentsOf: Input.filter(transactionHashChunks.contains(Input.Columns.transactionHash)).fetchAll(db))
+                try outputs.append(contentsOf: Output.filter(transactionHashChunks.contains(Output.Columns.transactionHash)).fetchAll(db))
+                try metadata.append(contentsOf: TransactionMetadata.filter(transactionHashChunks.contains(TransactionMetadata.Columns.transactionHash)).fetchAll(db))
+            }
+        }
+
+        let inputsByTransaction: [Data: [Input]] = Dictionary(grouping: inputs, by: { $0.transactionHash })
+        let outputsByTransaction: [Data: [Output]] = Dictionary(grouping: outputs, by: { $0.transactionHash })
+        var results = [FullTransaction]()
+
+        for hash in hashes {
+            guard let transaction = transactions.first(where: { $0.dataHash == hash }) else {
+                continue
+            }
+
+            let fullTransaction = FullTransaction(
+                header: transaction,
+                inputs: inputsByTransaction[hash] ?? [],
+                outputs: outputsByTransaction[hash] ?? []
+            )
+
+            if let _metadata =  metadata.first(where: { $0.transactionHash == hash }) {
+                fullTransaction.metaData.transactionHash = _metadata.transactionHash
+                fullTransaction.metaData.fee = _metadata.fee
+                fullTransaction.metaData.type = _metadata.type
+                fullTransaction.metaData.amount = _metadata.amount
+            }
+
+            results.append(fullTransaction)
+        }
+
+        return results
+    }
+
+    public func descendantTransactionsFullInfo(of transactionHash: Data) -> [FullTransactionForInfo] {
+        guard let fullTransactionInfo = transactionFullInfo(byHash: transactionHash) else {
+            return []
+        }
+
+        return inputsUsingOutputs(withTransactionHash: transactionHash)
+            .reduce(into: [fullTransactionInfo]) { list, input in
+                list.append(contentsOf: descendantTransactionsFullInfo(of: input.transactionHash))
+            }
+    }
+
+    public func descendantTransactions(of transactionHash: Data) -> [Transaction] {
+        guard let transaction = transaction(byHash: transactionHash) else {
+            return []
+        }
+
+        return inputsUsingOutputs(withTransactionHash: transactionHash)
+            .reduce(into: [transaction]) { list, input in
+                list.append(contentsOf: descendantTransactions(of: input.transactionHash))
+            }
+    }
+
     public func newTransactions() -> [FullTransaction] {
         try! dbPool.read { db in
             try Transaction.filter(Transaction.Columns.status == TransactionStatus.new).fetchAll(db)
@@ -1065,7 +1164,7 @@ extension GrdbStorage: IStorage {
             INNER JOIN publicKeys ON outputs.publicKeyPath = publicKeys.path
             INNER JOIN transactions ON outputs.transactionHash = transactions.dataHash
             LEFT JOIN blocks ON transactions.blockHash = blocks.headerHash
-            WHERE outputs.scriptType != \(ScriptType.unknown.rawValue)
+            WHERE outputs.scriptType != \(ScriptType.unknown.rawValue) AND transactions.conflictingTxHash IS NULL
             """
             let rows = try Row.fetchCursor(db, sql: sql, adapter: adapter)
 

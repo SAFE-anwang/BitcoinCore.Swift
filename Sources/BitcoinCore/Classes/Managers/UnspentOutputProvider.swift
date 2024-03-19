@@ -3,10 +3,10 @@ class UnspentOutputProvider {
     let pluginManager: IPluginManager
     let confirmationsThreshold: Int
 
-    private var confirmedUtxo: [UnspentOutput] {
+    // Confirmed incoming and all outgoing unspent outputs
+    private var allUtxo: [UnspentOutput] {
         let lastBlockHeight = storage.lastBlock?.height ?? 0
 
-        // Output must have a public key, that is, must belong to the user
         return storage.unspentOutputs()
             .filter { unspentOutput in
                 // If a transaction is an outgoing transaction, then it can be used
@@ -37,11 +37,11 @@ class UnspentOutputProvider {
 
     private var unspendableUtxo: [UnspentOutput] {
         let lastBlockHeight = storage.lastBlock?.height ?? 0
-        return confirmedUtxo.filter {
+        return allUtxo.filter {
             if let unlockedHeight = $0.output.unlockedHeight, unlockedHeight > lastBlockHeight {
                 return true
             }
-            return !pluginManager.isSpendable(unspentOutput: $0)
+            return !pluginManager.isSpendable(unspentOutput: $0) || $0.transaction.status != .relayed
         }
     }
 
@@ -55,12 +55,26 @@ class UnspentOutputProvider {
 extension UnspentOutputProvider: IUnspentOutputProvider {
     var spendableUtxo: [UnspentOutput] {
         let lastBlockHeight = storage.lastBlock?.height ?? 0
-        return confirmedUtxo.filter {
+        return allUtxo.filter {
             if let unlockedHeight = $0.output.unlockedHeight, unlockedHeight > lastBlockHeight {
                 return false
             }
-            return pluginManager.isSpendable(unspentOutput: $0)
+            return pluginManager.isSpendable(unspentOutput: $0) && $0.transaction.status == .relayed
         }
+    }
+
+    // Only confirmed spendable outputs
+    var confirmedSpendableUtxo: [UnspentOutput] {
+        let lastBlockHeight = storage.lastBlock?.height ?? 0
+
+        return spendableUtxo
+            .filter { unspentOutput in
+                guard let blockHeight = unspentOutput.blockHeight else {
+                    return false
+                }
+
+                return blockHeight <= lastBlockHeight - confirmationsThreshold + 1
+            }
     }
 }
 

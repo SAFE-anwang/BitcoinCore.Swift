@@ -15,6 +15,7 @@ public class BitcoinCore {
 
     private let transactionCreator: ITransactionCreator?
     private let transactionFeeCalculator: ITransactionFeeCalculator?
+    private let replacementTransactionBuilder: ReplacementTransactionBuilder?
     private let dustCalculator: IDustCalculator?
     private let paymentAddressParser: IPaymentAddressParser
 
@@ -84,7 +85,7 @@ public class BitcoinCore {
          peerGroup: IPeerGroup, initialDownload: IInitialDownload, bloomFilterLoader: BloomFilterLoader, transactionSyncer: ITransactionSyncer,
          publicKeyManager: IPublicKeyManager, addressConverter: AddressConverterChain, restoreKeyConverterChain: RestoreKeyConverterChain,
          unspentOutputSelector: UnspentOutputSelectorChain,
-         transactionCreator: ITransactionCreator?, transactionFeeCalculator: ITransactionFeeCalculator?, dustCalculator: IDustCalculator?,
+         transactionCreator: ITransactionCreator?, transactionFeeCalculator: ITransactionFeeCalculator?, replacementTransactionBuilder: ReplacementTransactionBuilder?, dustCalculator: IDustCalculator?,
          paymentAddressParser: IPaymentAddressParser, networkMessageParser: NetworkMessageParser, networkMessageSerializer: NetworkMessageSerializer,
          syncManager: SyncManager, pluginManager: IPluginManager, watchedTransactionManager: IWatchedTransactionManager, purpose: Purpose,
          peerManager: IPeerManager)
@@ -101,6 +102,7 @@ public class BitcoinCore {
         self.unspentOutputSelector = unspentOutputSelector
         self.transactionCreator = transactionCreator
         self.transactionFeeCalculator = transactionFeeCalculator
+        self.replacementTransactionBuilder = replacementTransactionBuilder
         self.dustCalculator = dustCalculator
         self.paymentAddressParser = paymentAddressParser
 
@@ -170,42 +172,60 @@ public extension BitcoinCore {
     func transaction(hash: String) -> TransactionInfo? {
         dataProvider.transaction(hash: hash)
     }
-    
-    // unlockedHeight、reverseHex UPDATE FOR SAFE
-    func send(to address: String, value: Int, feeRate: Int, sortType: TransactionDataSortType, pluginData: [UInt8: IPluginData] = [:], unlockedHeight: Int? = nil, reverseHex: String? = nil) throws -> FullTransaction {
-        guard let transactionCreator = transactionCreator else {
-            throw CoreError.readOnlyCore
-        }
 
-        return try transactionCreator.create(to: address, value: value, feeRate: feeRate, senderPay: true, sortType: sortType, pluginData: pluginData, unlockedHeight: unlockedHeight, reverseHex: reverseHex)
+    var unspentOutputs: [UnspentOutput] {
+        unspentOutputSelector.all
     }
-    
+
+    var unspentOutputsInfo: [UnspentOutputInfo] {
+        unspentOutputSelector.all.map {
+            .init(
+                outputIndex: $0.output.index,
+                transactionHash: $0.output.transactionHash,
+                timestamp: TimeInterval($0.transaction.timestamp),
+                address: $0.output.address,
+                value: $0.output.value
+            )
+        }
+    }
     // unlockedHeight、reverseHex UPDATE FOR SAFE
-    func send(to hash: Data, scriptType: ScriptType, value: Int, feeRate: Int, sortType: TransactionDataSortType, unlockedHeight: Int? = nil, reverseHex: String? = nil) throws -> FullTransaction {
-        guard let transactionCreator = transactionCreator else {
+    func send(to address: String, memo: String?, value: Int, feeRate: Int, sortType: TransactionDataSortType, rbfEnabled: Bool, unspentOutputs: [UnspentOutputInfo]?, pluginData: [UInt8: IPluginData] = [:], unlockedHeight: Int? = nil, reverseHex: String? = nil) throws -> FullTransaction {
+        guard let transactionCreator else {
             throw CoreError.readOnlyCore
         }
 
+        let outputs = unspentOutputs.map { $0.outputs(from: unspentOutputSelector.all) }
+        return try transactionCreator.create(to: address, memo: memo, value: value, feeRate: feeRate, senderPay: true, sortType: sortType, rbfEnabled: rbfEnabled, unspentOutputs: outputs, pluginData: pluginData, unlockedHeight: unlockedHeight, reverseHex: reverseHex)
+    }
+    // unlockedHeight、reverseHex UPDATE FOR SAFE
+    func send(to address: String, memo: String?, value: Int, feeRate: Int, sortType: TransactionDataSortType, rbfEnabled: Bool, pluginData: [UInt8: IPluginData], unlockedHeight: Int? = nil, reverseHex: String? = nil) throws -> FullTransaction {
+        try send(to: address, memo: memo, value: value, feeRate: feeRate, sortType: sortType, rbfEnabled: rbfEnabled, unspentOutputs: nil, pluginData: pluginData, unlockedHeight: unlockedHeight, reverseHex: reverseHex)
+    }
+    // unlockedHeight、reverseHex UPDATE FOR SAFE
+    func send(to hash: Data, memo: String?, scriptType: ScriptType, value: Int, feeRate: Int, sortType: TransactionDataSortType, rbfEnabled: Bool, unspentOutputs: [UnspentOutputInfo]?, unlockedHeight: Int? = nil, reverseHex: String? = nil) throws -> FullTransaction {
+        guard let transactionCreator else {
+            throw CoreError.readOnlyCore
+        }
+
+        let outputs = unspentOutputs.map { $0.outputs(from: unspentOutputSelector.all) }
         let toAddress = try addressConverter.convert(lockingScriptPayload: hash, type: scriptType)
-        return try transactionCreator.create(to: toAddress.stringValue, value: value, feeRate: feeRate, senderPay: true, sortType: sortType, pluginData: [:], unlockedHeight: unlockedHeight, reverseHex: reverseHex)
+        return try transactionCreator.create(to: toAddress.stringValue, memo: memo, value: value, feeRate: feeRate, senderPay: true, sortType: sortType, rbfEnabled: rbfEnabled, unspentOutputs: outputs, pluginData: [:], unlockedHeight: unlockedHeight, reverseHex: reverseHex)
     }
-    
-    // unlockedHeight、reverseHex UPDATE FOR SAFE
-    func redeem(from unspentOutput: UnspentOutput, to address: String, feeRate: Int, sortType: TransactionDataSortType) throws -> FullTransaction {
-        guard let transactionCreator = transactionCreator else {
+
+    internal func redeem(from unspentOutput: UnspentOutput, memo: String?, to address: String, feeRate: Int, sortType: TransactionDataSortType, rbfEnabled: Bool) throws -> FullTransaction {
+        guard let transactionCreator else {
             throw CoreError.readOnlyCore
         }
 
-        return try transactionCreator.create(from: unspentOutput, to: address, feeRate: feeRate, sortType: sortType, unlockedHeight: nil, reverseHex: nil)
+        return try transactionCreator.create(from: unspentOutput, to: address, memo: memo, feeRate: feeRate, sortType: sortType, rbfEnabled: rbfEnabled, unlockedHeight: nil, reverseHex: nil)
     }
-    
-    // unlockedHeight、reverseHex UPDATE FOR SAFE
-    func createRawTransaction(to address: String, value: Int, feeRate: Int, sortType: TransactionDataSortType, pluginData: [UInt8: IPluginData] = [:]) throws -> Data {
-        guard let transactionCreator = transactionCreator else {
+
+    func createRawTransaction(to address: String, memo: String?, value: Int, feeRate: Int, sortType: TransactionDataSortType, rbfEnabled: Bool, unspentOutputs: [UnspentOutput]?, pluginData: [UInt8: IPluginData] = [:]) throws -> Data {
+        guard let transactionCreator else {
             throw CoreError.readOnlyCore
         }
 
-        return try transactionCreator.createRawTransaction(to: address, value: value, feeRate: feeRate, senderPay: true, sortType: sortType, pluginData: pluginData, unlockedHeight: nil, reverseHex: nil)
+        return try transactionCreator.createRawTransaction(to: address, memo: memo, value: value, feeRate: feeRate, senderPay: true, sortType: sortType, rbfEnabled: rbfEnabled, unspentOutputs: unspentOutputs, pluginData: pluginData, unlockedHeight: nil, reverseHex: nil)
     }
 
     func validate(address: String, pluginData: [UInt8: IPluginData] = [:]) throws {
@@ -216,21 +236,24 @@ public extension BitcoinCore {
         paymentAddressParser.parse(paymentAddress: paymentAddress)
     }
 
-    func fee(for value: Int, toAddress: String? = nil, feeRate: Int, pluginData: [UInt8: IPluginData] = [:]) throws -> Int {
+    func sendInfo(for value: Int, toAddress: String? = nil, memo: String?, feeRate: Int, unspentOutputs: [UnspentOutput]?, pluginData: [UInt8: IPluginData] = [:]) throws -> BitcoinSendInfo {
         guard let transactionFeeCalculator else {
             throw CoreError.readOnlyCore
         }
 
-        return try transactionFeeCalculator.fee(for: value, feeRate: feeRate, senderPay: true, toAddress: toAddress, pluginData: pluginData)
+        return try transactionFeeCalculator.sendInfo(for: value, feeRate: feeRate, senderPay: true, toAddress: toAddress, memo: memo, unspentOutputs: unspentOutputs, pluginData: pluginData)
     }
 
-    func maxSpendableValue(toAddress: String? = nil, feeRate: Int, pluginData: [UInt8: IPluginData] = [:]) throws -> Int {
+    func maxSpendableValue(toAddress: String? = nil, memo: String?, feeRate: Int, unspentOutputs: [UnspentOutputInfo]?, pluginData: [UInt8: IPluginData] = [:]) throws -> Int {
         guard let transactionFeeCalculator else {
             throw CoreError.readOnlyCore
         }
 
-        let sendAllFee = try transactionFeeCalculator.fee(for: balance.spendable, feeRate: feeRate, senderPay: false, toAddress: toAddress, pluginData: pluginData)
-        return max(0, balance.spendable - sendAllFee)
+        let outputs = unspentOutputs.map { $0.outputs(from: unspentOutputSelector.all) }
+        let balance = outputs.map { $0.map(\.output.value).reduce(0, +) } ?? balance.spendable
+
+        let sendAllFee = try transactionFeeCalculator.sendInfo(for: balance, feeRate: feeRate, senderPay: false, toAddress: toAddress, memo: memo, unspentOutputs: outputs, pluginData: pluginData).fee
+        return max(0, balance - sendAllFee)
     }
 
     func minSpendableValue(toAddress: String? = nil) throws -> Int {
@@ -260,6 +283,10 @@ public extension BitcoinCore {
         return address.stringValue
     }
 
+    func address(from publicKey: PublicKey) throws -> Address {
+        try addressConverter.convert(publicKey: publicKey, type: purpose.scriptType)
+    }
+
     func changePublicKey() throws -> PublicKey {
         try publicKeyManager.changePublicKey()
     }
@@ -268,8 +295,38 @@ public extension BitcoinCore {
         try publicKeyManager.receivePublicKey()
     }
 
+    func usedAddresses(change: Bool) -> [UsedAddress] {
+        publicKeyManager.usedPublicKeys(change: change).compactMap { pubKey in
+            let address = try? addressConverter.convert(publicKey: pubKey, type: purpose.scriptType)
+            return address.map { UsedAddress(index: pubKey.index, address: $0.stringValue) }
+        }
+    }
+
     internal func watch(transaction: BitcoinCore.TransactionFilter, delegate: IWatchedTransactionDelegate) {
         watchedTransactionManager.add(transactionFilter: transaction, delegatedTo: delegate)
+    }
+
+    func replacementTransaction(transactionHash: String, minFee: Int, type: ReplacementType) throws -> ReplacementTransaction {
+        guard let replacementTransactionBuilder else {
+            throw CoreError.readOnlyCore
+        }
+
+        let (mutableTransaction, fullInfo, descendantTransactionHashes) = try replacementTransactionBuilder.replacementTransaction(transactionHash: transactionHash, minFee: minFee, type: type)
+        let info = dataProvider.transactionInfo(from: fullInfo)
+
+        return ReplacementTransaction(mutableTransaction: mutableTransaction, info: info, replacedTransactionHashes: descendantTransactionHashes)
+    }
+
+    func send(replacementTransaction: ReplacementTransaction) throws -> FullTransaction {
+        guard let transactionCreator else {
+            throw CoreError.readOnlyCore
+        }
+
+        return try transactionCreator.create(from: replacementTransaction.mutableTransaction)
+    }
+
+    func replacmentTransactionInfo(transactionHash: String, type: ReplacementType) -> (originalTransactionSize: Int, feeRange: Range<Int>)? {
+        replacementTransactionBuilder?.replacementInfo(transactionHash: transactionHash, type: type)
     }
 
     func debugInfo(network: INetwork) -> String {
@@ -278,6 +335,7 @@ public extension BitcoinCore {
 
     var statusInfo: [(String, Any)] {
         var status = [(String, Any)]()
+        status.append(("sync mode", syncManager.syncMode.description))
         status.append(("state", syncManager.syncState.toString()))
         status.append(("synced until", ((lastBlockInfo?.timestamp.map { Double($0) })?.map { Date(timeIntervalSince1970: $0) }) ?? "n/a"))
         status.append(("syncing peer", initialDownload.syncPeer?.host ?? "n/a"))
@@ -386,9 +444,17 @@ public extension BitcoinCore {
     }
 
     enum SyncMode: Equatable {
-        case blockchair(key: String) // Restore and sync from Blockchair API.
+        case blockchair // Restore and sync from Blockchair API.
         case api // Restore and sync from API.
         case full // Sync from bip44Checkpoint. Api restore disabled
+
+        var description: String {
+            switch self {
+            case .blockchair: return "Blockchair API"
+            case .api: return "Hybrid"
+            case .full: return "Blockchain"
+            }
+        }
     }
 
     enum TransactionFilter {

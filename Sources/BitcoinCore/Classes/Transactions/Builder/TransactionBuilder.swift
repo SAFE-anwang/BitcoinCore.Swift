@@ -3,20 +3,18 @@ class TransactionBuilder {
     private let inputSetter: IInputSetter
     private let lockTimeSetter: ILockTimeSetter
     private let outputSetter: IOutputSetter
-    private let signer: TransactionSigner
 
-    init(recipientSetter: IRecipientSetter, inputSetter: IInputSetter, lockTimeSetter: ILockTimeSetter, outputSetter: IOutputSetter, signer: TransactionSigner) {
+    init(recipientSetter: IRecipientSetter, inputSetter: IInputSetter, lockTimeSetter: ILockTimeSetter, outputSetter: IOutputSetter) {
         self.recipientSetter = recipientSetter
         self.inputSetter = inputSetter
         self.lockTimeSetter = lockTimeSetter
         self.outputSetter = outputSetter
-        self.signer = signer
     }
 }
 
 extension TransactionBuilder: ITransactionBuilder {
 
-    func buildTransaction(toAddress: String, value: Int, feeRate: Int, senderPay: Bool, sortType: TransactionDataSortType, pluginData: [UInt8: IPluginData], unlockedHeight: Int?, reverseHex: String?) throws -> FullTransaction {
+    func buildTransaction(toAddress: String, memo: String?, value: Int, feeRate: Int, senderPay: Bool, sortType: TransactionDataSortType, rbfEnabled: Bool, unspentOutputs: [UnspentOutput]?, pluginData: [UInt8: IPluginData], unlockedHeight: Int?, reverseHex: String?) throws -> MutableTransaction {
         let mutableTransaction = MutableTransaction()
         
         if unlockedHeight != nil {
@@ -26,17 +24,16 @@ extension TransactionBuilder: ITransactionBuilder {
             mutableTransaction.reverseHex = reverseHex
         }
 
-        try recipientSetter.setRecipient(to: mutableTransaction, toAddress: toAddress, value: value, pluginData: pluginData, skipChecks: false)
-        try inputSetter.setInputs(to: mutableTransaction, feeRate: feeRate, senderPay: senderPay, sortType: sortType)
+        try recipientSetter.setRecipient(to: mutableTransaction, toAddress: toAddress, memo: memo, value: value, pluginData: pluginData, skipChecks: false)
+        try inputSetter.setInputs(to: mutableTransaction, feeRate: feeRate, senderPay: senderPay, unspentOutputs: unspentOutputs, sortType: sortType, rbfEnabled: rbfEnabled)
         lockTimeSetter.setLockTime(to: mutableTransaction)
 
         outputSetter.setOutputs(to: mutableTransaction, sortType: sortType)
-        try signer.sign(mutableTransaction: mutableTransaction)
 
-        return mutableTransaction.build()
+        return mutableTransaction
     }
 
-    func buildTransaction(from unspentOutput: UnspentOutput, toAddress: String, feeRate: Int, sortType: TransactionDataSortType, unlockedHeight: Int?, reverseHex: String?) throws -> FullTransaction {
+    func buildTransaction(from unspentOutput: UnspentOutput, toAddress: String, memo: String?, feeRate: Int, sortType: TransactionDataSortType, rbfEnabled: Bool, unlockedHeight: Int?, reverseHex: String?) throws -> MutableTransaction {
         let mutableTransaction = MutableTransaction(outgoing: false)
         
         if unlockedHeight != nil {
@@ -45,14 +42,13 @@ extension TransactionBuilder: ITransactionBuilder {
         if reverseHex != nil {
             mutableTransaction.reverseHex = reverseHex
         }
-        
-        try recipientSetter.setRecipient(to: mutableTransaction, toAddress: toAddress, value: unspentOutput.output.value, pluginData: [:], skipChecks: false)
-        try inputSetter.setInputs(to: mutableTransaction, fromUnspentOutput: unspentOutput, feeRate: feeRate)
+
+        try recipientSetter.setRecipient(to: mutableTransaction, toAddress: toAddress, memo: memo, value: unspentOutput.output.value, pluginData: [:], skipChecks: false)
+        try inputSetter.setInputs(to: mutableTransaction, fromUnspentOutput: unspentOutput, feeRate: feeRate, rbfEnabled: rbfEnabled)
         lockTimeSetter.setLockTime(to: mutableTransaction)
 
         outputSetter.setOutputs(to: mutableTransaction, sortType: sortType)
-        try signer.sign(mutableTransaction: mutableTransaction)
 
-        return mutableTransaction.build()
+        return mutableTransaction
     }
 }

@@ -9,7 +9,7 @@ class SyncManager {
     private let apiSyncer: IApiSyncer
     private let peerGroup: IPeerGroup
     private let storage: IStorage
-    private let syncMode: BitcoinCore.SyncMode
+    let syncMode: BitcoinCore.SyncMode
 
     private var initialBestBlockHeight: Int32
     private var currentBestBlockHeight: Int32
@@ -213,7 +213,6 @@ extension SyncManager: IBlockSyncListener {
         let forceAddedBlocks = forceAddedBlocksTotal - storage.apiBlockHashesCount
 
         if forceAddedBlocks >= forceAddedBlocksTotal {
-            apiSyncer.syncLastBlock()
             syncState = .synced
         } else {
             syncState = .syncing(progress: Double(forceAddedBlocks) / Double(forceAddedBlocksTotal))

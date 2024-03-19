@@ -115,6 +115,10 @@ extension DataProvider: IDataProvider {
         return transactionInfoConverter.transactionInfo(fromTransaction: transactionFullInfo)
     }
 
+    func transactionInfo(from fullInfo: FullTransactionForInfo) -> TransactionInfo {
+        transactionInfoConverter.transactionInfo(fromTransaction: fullInfo)
+    }
+
     func debugInfo(network _: INetwork, scriptType: ScriptType, addressConverter: IAddressConverter) -> String {
         var lines = [String]()
 

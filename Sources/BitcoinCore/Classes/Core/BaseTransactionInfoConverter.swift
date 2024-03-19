@@ -45,10 +45,14 @@ public class BaseTransactionInfoConverter: IBaseTransactionInfoConverter {
                 outputInfo.pluginId = pluginId
                 outputInfo.pluginDataString = pluginDataString
                 outputInfo.pluginData = pluginManager.parsePluginData(fromPlugin: pluginId, pluginDataString: pluginDataString, transactionTimestamp: transactionTimestamp)
+            } else if let memo = output.memo {
+                outputInfo.memo = memo
             }
 
             outputsInfo.append(outputInfo)
         }
+
+        let rbfEnabled = transactionForInfo.inputsWithPreviousOutputs.contains(where: { $0.input.rbfEnabled })
 
         return T(
             uid: transaction.uid,
@@ -62,7 +66,8 @@ public class BaseTransactionInfoConverter: IBaseTransactionInfoConverter {
             blockHeight: transactionForInfo.transactionWithBlock.blockHeight,
             timestamp: transactionTimestamp,
             status: transaction.status,
-            conflictingHash: transaction.conflictingTxHash?.hs.reversedHex
+            conflictingHash: transaction.conflictingTxHash?.hs.reversedHex,
+            rbfEnabled: rbfEnabled
         )
     }
 
