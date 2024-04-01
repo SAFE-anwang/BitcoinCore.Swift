@@ -133,8 +133,8 @@ open class AbstractKit {
 
     
     // safe update
-    open func updateLastBlockInfo(network: INetwork, syncMode: BitcoinCore.SyncMode) {
-        bitcoinCore.updateLastBlockInfo(network: network, syncMode: syncMode)
+    open func updateLastBlockInfo(network: INetwork, syncMode: BitcoinCore.SyncMode, fallbackDate: CheckpointData.FallbackDate) {
+        bitcoinCore.updateLastBlockInfo(network: network, syncMode: syncMode, fallbackDate: fallbackDate)
         
     }
 
