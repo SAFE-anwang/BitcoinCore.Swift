@@ -442,6 +442,7 @@ public protocol IUnspentOutputSelector {
 
 public protocol IUnspentOutputProvider {
     var spendableUtxo: [UnspentOutput] { get }
+    var unspendableTimeLockedUtxo: [UnspentOutput] { get }
     var confirmedSpendableUtxo: [UnspentOutput] { get }
 }
 

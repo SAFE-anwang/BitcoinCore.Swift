@@ -177,6 +177,10 @@ public extension BitcoinCore {
         unspentOutputSelector.all
     }
 
+    var unspendableTimeLockedUtxo: [UnspentOutput] {
+        unspentOutputSelector.unspendableTimeLockedUtxo
+    }
+    
     var unspentOutputsInfo: [UnspentOutputInfo] {
         unspentOutputSelector.all.map {
             .init(
