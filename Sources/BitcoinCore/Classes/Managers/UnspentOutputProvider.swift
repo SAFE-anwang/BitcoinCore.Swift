@@ -44,6 +44,16 @@ class UnspentOutputProvider {
             return !pluginManager.isSpendable(unspentOutput: $0) || $0.transaction.status != .relayed
         }
     }
+    
+    var unspendableTimeLockedUtxo: [UnspentOutput] {
+        let lastBlockHeight = storage.lastBlock?.height ?? 0
+        return allUtxo.filter {
+            if let unlockedHeight = $0.output.unlockedHeight, unlockedHeight > lastBlockHeight {
+                return true
+            }
+            return !pluginManager.isSpendable(unspentOutput: $0)
+        }
+    }
 
     init(storage: IStorage, pluginManager: IPluginManager, confirmationsThreshold: Int) {
         self.storage = storage
@@ -63,16 +73,6 @@ extension UnspentOutputProvider: IUnspentOutputProvider {
         }
     }
     
-    var unspendableTimeLockedUtxo: [UnspentOutput] {
-        let lastBlockHeight = storage.lastBlock?.height ?? 0
-        return allUtxo.filter {
-            if let unlockedHeight = $0.output.unlockedHeight, unlockedHeight > lastBlockHeight {
-                return true
-            }
-            return !pluginManager.isSpendable(unspentOutput: $0)
-        }
-    }
-
     // Only confirmed spendable outputs
     var confirmedSpendableUtxo: [UnspentOutput] {
         let lastBlockHeight = storage.lastBlock?.height ?? 0

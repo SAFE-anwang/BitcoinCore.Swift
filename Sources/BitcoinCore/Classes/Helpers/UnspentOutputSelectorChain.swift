@@ -29,6 +29,6 @@ class UnspentOutputSelectorChain: IUnspentOutputSelector {
     }
     
     var unspendableTimeLockedUtxo: [UnspentOutput] {
-        provider.unspendableTimeLockedUtxo
+        (provider as? UnspentOutputProvider)?.unspendableTimeLockedUtxo ?? []
     }
 }
