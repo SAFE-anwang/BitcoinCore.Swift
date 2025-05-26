@@ -34,7 +34,7 @@ protocol IHDWallet {
     func publicKeys(account: Int, indices: Range<UInt32>, external: Bool) throws -> [PublicKey]
 }
 
-public protocol IPrivateHDWallet {
+protocol IPrivateHDWallet {
     func privateKeyData(account: Int, index: Int, external: Bool) throws -> Data
 }
 
