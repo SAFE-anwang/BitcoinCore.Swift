@@ -15,6 +15,11 @@ open class TransactionInfo: ITransactionInfo, Codable {
     public let conflictingHash: String?
     public let rbfEnabled: Bool
 
+    public var replaceable: Bool {
+        // Here we can't check wether there are conflicting transactions in state "new", so this flag must be used with caution.
+        rbfEnabled && blockHeight == nil && conflictingHash == nil
+    }
+
     public required init(uid: String, transactionHash: String, transactionIndex: Int, inputs: [TransactionInputInfo], outputs: [TransactionOutputInfo],
                          amount: Int, type: TransactionType, fee: Int?, blockHeight: Int?, timestamp: Int, status: TransactionStatus, conflictingHash: String?, rbfEnabled: Bool)
     {
@@ -81,9 +86,14 @@ public struct BlockInfo {
 
 public struct BalanceInfo: Equatable {
     public let spendable: Int
-    public let unspendable: Int
+    public let unspendableTimeLocked: Int
+    public let unspendableNotRelayed: Int
 
     public static func == (lhs: BalanceInfo, rhs: BalanceInfo) -> Bool {
-        lhs.spendable == rhs.spendable && lhs.unspendable == rhs.unspendable
+        lhs.spendable == rhs.spendable && lhs.unspendableTimeLocked == rhs.unspendableTimeLocked && lhs.unspendableNotRelayed == rhs.unspendableNotRelayed
+    }
+
+    public var unspendable: Int {
+        unspendableNotRelayed + unspendableTimeLocked
     }
 }

@@ -6,16 +6,16 @@ class UnspentOutputSelectorChain: IUnspentOutputSelector {
         self.provider = provider
     }
 
-    var all: [UnspentOutput] {
-        provider.spendableUtxo
+    public func allSpendable(filters: UtxoFilters) -> [UnspentOutput] {
+        provider.spendableUtxo(filters: filters)
     }
 
-    func select(value: Int, memo: String?, feeRate: Int, outputScriptType: ScriptType, changeType: ScriptType, senderPay: Bool, pluginDataOutputSize: Int) throws -> SelectedUnspentOutputInfo {
+    func select(params: SendParameters, outputScriptType: ScriptType, changeType: ScriptType, pluginDataOutputSize: Int) throws -> SelectedUnspentOutputInfo {
         var lastError: Error = BitcoinCoreErrors.Unexpected.unknown
 
         for selector in concreteSelectors {
             do {
-                return try selector.select(value: value, memo: memo, feeRate: feeRate, outputScriptType: outputScriptType, changeType: changeType, senderPay: senderPay, pluginDataOutputSize: pluginDataOutputSize)
+                return try selector.select(params: params, outputScriptType: outputScriptType, changeType: changeType, pluginDataOutputSize: pluginDataOutputSize)
             } catch {
                 lastError = error
             }

@@ -346,6 +346,37 @@ open class GrdbStorage {
             }
         }
 
+        migrator.registerMigration("fixPublicKeyPath") { db in
+            let outputs = try Output.fetchAll(db)
+            let outputsMap = Dictionary(grouping: outputs, by: { $0.publicKeyPath })
+
+            let blockHashPublicKeys = try BlockHashPublicKey.fetchAll(db)
+            let blockHashPublicKeysMap = Dictionary(grouping: blockHashPublicKeys, by: { $0.publicKeyPath })
+
+            let publicKeys = try PublicKey.fetchAll(db)
+            try PublicKey.deleteAll(db)
+            try BlockHashPublicKey.deleteAll(db)
+
+            for publicKey in publicKeys {
+                let newPublicKey = try PublicKey(
+                    withAccount: publicKey.account, index: publicKey.index,
+                    external: publicKey.external, hdPublicKeyData: publicKey.raw
+                )
+
+                try newPublicKey.insert(db)
+
+                for output in outputsMap[publicKey.path] ?? [] {
+                    output.publicKeyPath = newPublicKey.path
+                    try output.update(db)
+                }
+
+                for blockHashPublicKey in blockHashPublicKeysMap[publicKey.path] ?? [] {
+                    blockHashPublicKey.publicKeyPath = newPublicKey.path
+                    try blockHashPublicKey.insert(db)
+                }
+            }
+        }
+
         return migrator
     }
 
@@ -517,8 +548,8 @@ extension GrdbStorage: IStorage {
 
     }
 
-    public func deletePeerAddress(byIp ip: String) {
-        _ = try! dbPool.write { db in
+    public func deletePeerAddress(byIp ip: String) throws {
+        _ = try dbPool.write { db in
             try PeerAddress.filter(PeerAddress.Columns.ip == ip).deleteAll(db)
         }
     }
@@ -725,19 +756,19 @@ extension GrdbStorage: IStorage {
     }
 
     public func add(block: Block) throws {
-        _ = try! dbPool.write { db in
+        _ = try dbPool.write { db in
             try block.insert(db)
         }
     }
 
     public func setBlockPartial(hash: Data) throws {
-        _ = try! dbPool.write { db in
+        _ = try dbPool.write { db in
             try Block.filter(Block.Columns.headerHash == hash).updateAll(db, Block.Columns.partial.set(to: true))
         }
     }
 
     public func delete(blocks: [Block]) throws {
-        _ = try! dbPool.write { db in
+        _ = try dbPool.write { db in
             for block in blocks {
                 for transaction in transactions(ofBlock: block) {
                     try Input.filter(Input.Columns.transactionHash == transaction.dataHash).deleteAll(db)
@@ -752,7 +783,7 @@ extension GrdbStorage: IStorage {
     }
 
     public func unstaleAllBlocks() throws {
-        _ = try! dbPool.write { db in
+        _ = try dbPool.write { db in
             try db.execute(sql: "UPDATE \(Block.databaseTableName) SET stale = ? WHERE stale = ?", arguments: [false, true])
         }
     }
@@ -882,7 +913,7 @@ extension GrdbStorage: IStorage {
         var inputs = [Input]()
         var outputs = [Output]()
         var metadata = [TransactionMetadata]()
-        let hashes = transactions.map { $0.dataHash }
+        let hashes = transactions.map(\.dataHash)
 
         try! dbPool.read { db in
             for transactionHashChunks in hashes.chunked(into: 999) {
@@ -907,7 +938,7 @@ extension GrdbStorage: IStorage {
                 outputs: outputsByTransaction[hash] ?? []
             )
 
-            if let _metadata =  metadata.first(where: { $0.transactionHash == hash }) {
+            if let _metadata = metadata.first(where: { $0.transactionHash == hash }) {
                 fullTransaction.metaData.transactionHash = _metadata.transactionHash
                 fullTransaction.metaData.fee = _metadata.fee
                 fullTransaction.metaData.type = _metadata.type
@@ -967,19 +998,19 @@ extension GrdbStorage: IStorage {
     }
 
     public func add(transaction: FullTransaction) throws {
-        _ = try! dbPool.write { db in
+        _ = try dbPool.write { db in
             try _add(transaction: transaction, db: db)
         }
     }
 
     public func update(transaction: FullTransaction) throws {
-        _ = try! dbPool.write { db in
+        _ = try dbPool.write { db in
             try _update(transaction: transaction, db: db)
         }
     }
 
     public func update(transaction: Transaction) throws {
-        _ = try! dbPool.write { db in
+        _ = try dbPool.write { db in
             try transaction.update(db)
         }
     }
@@ -1047,7 +1078,7 @@ extension GrdbStorage: IStorage {
         return fullInfo(forTransactions: [transactionWithBlock]).first
     }
 
-    public func validOrInvalidTransactionsFullInfo(fromTimestamp: Int?, fromOrder: Int?, type: TransactionFilterType?, limit: Int?) -> [FullTransactionForInfo] {
+    public func validOrInvalidTransactionsFullInfo(fromTimestamp: Int?, fromOrder: Int?, descending: Bool, type: TransactionFilterType?, limit: Int?) -> [FullTransactionForInfo] {
         var transactions = [TransactionWithBlock]()
 
         try! dbPool.read { db in
@@ -1067,7 +1098,7 @@ extension GrdbStorage: IStorage {
             var whereConditions = [String]()
 
             if let fromTimestamp, let fromOrder {
-                whereConditions.append("(transactions.timestamp < \(fromTimestamp) OR (transactions.timestamp == \(fromTimestamp) AND transactions.\"order\" < \(fromOrder)))")
+                whereConditions.append("(transactions.timestamp \(descending ? "<" : ">") \(fromTimestamp) OR (transactions.timestamp == \(fromTimestamp) AND transactions.\"order\" \(descending ? "<" : ">") \(fromOrder)))")
             }
 
             if let filterType = type {
@@ -1079,7 +1110,7 @@ extension GrdbStorage: IStorage {
                 sql += " WHERE \(whereConditions.joined(separator: " AND "))"
             }
 
-            sql += " ORDER BY transactions.timestamp DESC, transactions.\"order\" DESC"
+            sql += " ORDER BY transactions.timestamp DESC, transactions.\"order\" \(descending ? "DESC" : "ASC")"
 
             if let limit {
                 sql += " LIMIT \(limit)"
@@ -1106,7 +1137,7 @@ extension GrdbStorage: IStorage {
     }
 
     public func moveTransactionsTo(invalidTransactions: [InvalidTransaction]) throws {
-        try! dbPool.writeInTransaction { db in
+        try dbPool.writeInTransaction { db in
             for invalidTransaction in invalidTransactions {
                 try invalidTransaction.insert(db)
 
@@ -1128,7 +1159,7 @@ extension GrdbStorage: IStorage {
     }
 
     public func move(invalidTransaction: InvalidTransaction, toTransactions transaction: FullTransaction) throws {
-        try! dbPool.writeInTransaction { db in
+        try dbPool.writeInTransaction { db in
             try _add(transaction: transaction, db: db)
             try InvalidTransaction.filter(Transaction.Columns.uid == invalidTransaction.uid).deleteAll(db)
 
@@ -1190,6 +1221,12 @@ extension GrdbStorage: IStorage {
     public func outputs(transactionHash: Data) -> [Output] {
         try! dbPool.read { db in
             try _outputs(transactionHash: transactionHash, db: db)
+        }
+    }
+
+    public func outputsCount(transactionHash: Data) -> Int {
+        try! dbPool.read { db in
+            try Output.filter(Output.Columns.transactionHash == transactionHash).fetchCount(db)
         }
     }
 

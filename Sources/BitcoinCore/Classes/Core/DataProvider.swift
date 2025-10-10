@@ -89,7 +89,7 @@ extension DataProvider: IDataProvider {
         }
     }
 
-    func transactions(fromUid: String?, type: TransactionFilterType?, limit: Int?) -> [TransactionInfo] {
+    func transactions(fromUid: String?, type: TransactionFilterType?, descending: Bool, limit: Int?) -> [TransactionInfo] {
         var resolvedTimestamp: Int? = nil
         var resolvedOrder: Int? = nil
 
@@ -98,7 +98,7 @@ extension DataProvider: IDataProvider {
             resolvedOrder = transaction.order
         }
 
-        let transactions = storage.validOrInvalidTransactionsFullInfo(fromTimestamp: resolvedTimestamp, fromOrder: resolvedOrder, type: type, limit: limit)
+        let transactions = storage.validOrInvalidTransactionsFullInfo(fromTimestamp: resolvedTimestamp, fromOrder: resolvedOrder, descending: descending, type: type, limit: limit)
 
         return transactions.filter{ self.hasRightReserveOutput(transaction: $0) }.map { transactionInfoConverter.transactionInfo(fromTransaction: $0) }
     }

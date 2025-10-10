@@ -4,7 +4,9 @@ import ObjectMapper
 enum BlockchairResponse {
     private static let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
         return formatter
     }()
 
@@ -123,6 +125,26 @@ struct BlockchairBlocksResponse: ImmutableMappable {
 
         init(map: Map) throws {
             hash = try map.value("hash")
+        }
+    }
+}
+
+struct BlockchairBroadcastResponse: ImmutableMappable {
+    let data: [String: String]?
+    let context: ContextMap
+
+    init(map: Map) throws {
+        data = try map.value("data")
+        context = try map.value("context")
+    }
+
+    struct ContextMap: ImmutableMappable {
+        let code: Int
+        let error: String?
+
+        init(map: Map) throws {
+            code = try map.value("code")
+            error = try map.value("error")
         }
     }
 }

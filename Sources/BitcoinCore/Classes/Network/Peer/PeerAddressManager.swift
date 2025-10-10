@@ -58,7 +58,11 @@ extension PeerAddressManager: IPeerAddressManager {
         queue.sync {
             network.markedFailed(ip: ip)
             state.remove(usedIp: ip)
-            storage.deletePeerAddress(byIp: ip)
+            do {
+                try storage.deletePeerAddress(byIp: ip)
+            } catch {
+                print("Failed: \(error)")
+            }
         }
     }
 

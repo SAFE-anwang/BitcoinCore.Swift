@@ -1,4 +1,5 @@
 import Foundation
+import HsToolKit
 
 class PendingTransactionProcessor {
     private let storage: IStorage
@@ -6,24 +7,28 @@ class PendingTransactionProcessor {
     private let publicKeyManager: IPublicKeyManager
     private let irregularOutputFinder: IIrregularOutputFinder
     private let conflictsResolver: ITransactionConflictsResolver
+    private let ignoreIncoming: Bool
 
     weak var listener: IBlockchainDataListener?
     weak var transactionListener: ITransactionListener?
 
     private let queue: DispatchQueue
+    private let logger: Logger
 
     private var notMineTransactions = Set<Data>()
 
-    init(storage: IStorage, extractor: ITransactionExtractor, publicKeyManager: IPublicKeyManager, irregularOutputFinder: IIrregularOutputFinder, conflictsResolver: ITransactionConflictsResolver,
-         listener: IBlockchainDataListener? = nil, queue: DispatchQueue)
+    init(storage: IStorage, extractor: ITransactionExtractor, publicKeyManager: IPublicKeyManager, irregularOutputFinder: IIrregularOutputFinder,
+         conflictsResolver: ITransactionConflictsResolver, ignoreIncoming: Bool, listener: IBlockchainDataListener? = nil, queue: DispatchQueue, logger: Logger)
     {
         self.storage = storage
         self.extractor = extractor
         self.publicKeyManager = publicKeyManager
         self.irregularOutputFinder = irregularOutputFinder
         self.conflictsResolver = conflictsResolver
+        self.ignoreIncoming = ignoreIncoming
         self.listener = listener
         self.queue = queue
+        self.logger = logger
     }
 
     private func relay(transaction: Transaction, order: Int) {
@@ -98,6 +103,10 @@ extension PendingTransactionProcessor: IPendingTransactionProcessor {
                 }
 
                 try resolveConflicts(transaction: transaction, updated: &updated)
+                if ignoreIncoming, transaction.metaData.type == .incoming {
+                    continue
+                }
+
                 try storage.add(transaction: transaction)
                 inserted.append(transaction.header)
 
@@ -126,6 +135,7 @@ extension PendingTransactionProcessor: IPendingTransactionProcessor {
         }
 
         extractor.extract(transaction: transaction)
+        logger.debug("Saving in storage", context: ["Send", transaction.uid], save: true)
         try storage.add(transaction: transaction)
         listener?.onUpdate(updated: [], inserted: [transaction.header], inBlock: nil)
 

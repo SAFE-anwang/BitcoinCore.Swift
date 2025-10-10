@@ -11,6 +11,8 @@ public enum BitcoinCoreErrors {
     public enum TransactionSendError: Error {
         case noConnectedPeers
         case peersNotSynced
+        case apiSendFailed(reason: String?)
+        case invalidParameters
     }
 
     public enum MerkleBlockValidation: Error {
@@ -50,7 +52,7 @@ public enum BitcoinCoreErrors {
     }
 
     public enum SendValueErrors: Error {
-        case dust
+        case dust(Int)
         case emptyOutputs
         case singleNoChangeOutputNotFound
         case notEnough

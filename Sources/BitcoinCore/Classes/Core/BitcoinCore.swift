@@ -14,6 +14,7 @@ public class BitcoinCore {
     private let unspentOutputSelector: UnspentOutputSelectorChain
 
     private let transactionCreator: ITransactionCreator?
+    private let transactionBuilder: ITransactionBuilder?
     private let transactionFeeCalculator: ITransactionFeeCalculator?
     private let replacementTransactionBuilder: ReplacementTransactionBuilder?
     private let dustCalculator: IDustCalculator?
@@ -85,7 +86,7 @@ public class BitcoinCore {
          peerGroup: IPeerGroup, initialDownload: IInitialDownload, bloomFilterLoader: BloomFilterLoader, transactionSyncer: ITransactionSyncer,
          publicKeyManager: IPublicKeyManager, addressConverter: AddressConverterChain, restoreKeyConverterChain: RestoreKeyConverterChain,
          unspentOutputSelector: UnspentOutputSelectorChain,
-         transactionCreator: ITransactionCreator?, transactionFeeCalculator: ITransactionFeeCalculator?, replacementTransactionBuilder: ReplacementTransactionBuilder?, dustCalculator: IDustCalculator?,
+         transactionCreator: ITransactionCreator?, transactionFeeCalculator: ITransactionFeeCalculator?, transactionBuilder: ITransactionBuilder?, replacementTransactionBuilder: ReplacementTransactionBuilder?, dustCalculator: IDustCalculator?,
          paymentAddressParser: IPaymentAddressParser, networkMessageParser: NetworkMessageParser, networkMessageSerializer: NetworkMessageSerializer,
          syncManager: SyncManager, pluginManager: IPluginManager, watchedTransactionManager: IWatchedTransactionManager, purpose: Purpose,
          peerManager: IPeerManager)
@@ -102,6 +103,7 @@ public class BitcoinCore {
         self.unspentOutputSelector = unspentOutputSelector
         self.transactionCreator = transactionCreator
         self.transactionFeeCalculator = transactionFeeCalculator
+        self.transactionBuilder = transactionBuilder
         self.replacementTransactionBuilder = replacementTransactionBuilder
         self.dustCalculator = dustCalculator
         self.paymentAddressParser = paymentAddressParser
@@ -165,24 +167,24 @@ public extension BitcoinCore {
         syncManager.syncState
     }
 
-    func transactions(fromUid: String? = nil, type: TransactionFilterType?, limit: Int? = nil) -> [TransactionInfo] {
-        dataProvider.transactions(fromUid: fromUid, type: type, limit: limit)
+    func transactions(fromUid: String? = nil, type: TransactionFilterType?, descending: Bool, limit: Int? = nil) -> [TransactionInfo] {
+        dataProvider.transactions(fromUid: fromUid, type: type, descending: descending, limit: limit)
     }
 
     func transaction(hash: String) -> TransactionInfo? {
         dataProvider.transaction(hash: hash)
     }
 
-    var unspentOutputs: [UnspentOutput] {
-        unspentOutputSelector.all
+    func unspentOutputs(filters: UtxoFilters) -> [UnspentOutput] {
+        unspentOutputSelector.allSpendable(filters: filters)
     }
 
     var unspendableTimeLockedUtxo: [UnspentOutput] {
         unspentOutputSelector.unspendableTimeLockedUtxo
     }
     
-    var unspentOutputsInfo: [UnspentOutputInfo] {
-        unspentOutputSelector.all.map {
+    func unspentOutputsInfo(filters: UtxoFilters) -> [UnspentOutputInfo] {
+        unspentOutputSelector.allSpendable(filters: filters).map {
             .init(
                 outputIndex: $0.output.index,
                 transactionHash: $0.output.transactionHash,
@@ -192,44 +194,30 @@ public extension BitcoinCore {
             )
         }
     }
-    // unlockedHeight、reverseHex UPDATE FOR SAFE
-    func send(to address: String, memo: String?, value: Int, feeRate: Int, sortType: TransactionDataSortType, rbfEnabled: Bool, unspentOutputs: [UnspentOutputInfo]?, pluginData: [UInt8: IPluginData] = [:], unlockedHeight: Int? = nil, reverseHex: String? = nil) throws -> FullTransaction {
+
+    func address(fromHash hash: Data, scriptType: ScriptType) throws -> Address {
+        try addressConverter.convert(lockingScriptPayload: hash, type: scriptType)
+    }
+
+    func send(params: SendParameters) throws -> FullTransaction {
         guard let transactionCreator else {
             throw CoreError.readOnlyCore
         }
+        return try transactionCreator.create(params: params)
+    }
 
-        let outputs = unspentOutputs.map { $0.outputs(from: unspentOutputSelector.all) }
-        return try transactionCreator.create(to: address, memo: memo, value: value, feeRate: feeRate, senderPay: true, sortType: sortType, rbfEnabled: rbfEnabled, unspentOutputs: outputs, pluginData: pluginData, unlockedHeight: unlockedHeight, reverseHex: reverseHex)
-    }
-    // unlockedHeight、reverseHex UPDATE FOR SAFE
-    func send(to address: String, memo: String?, value: Int, feeRate: Int, sortType: TransactionDataSortType, rbfEnabled: Bool, pluginData: [UInt8: IPluginData], unlockedHeight: Int? = nil, reverseHex: String? = nil) throws -> FullTransaction {
-        try send(to: address, memo: memo, value: value, feeRate: feeRate, sortType: sortType, rbfEnabled: rbfEnabled, unspentOutputs: nil, pluginData: pluginData, unlockedHeight: unlockedHeight, reverseHex: reverseHex)
-    }
-    // unlockedHeight、reverseHex UPDATE FOR SAFE
-    func send(to hash: Data, memo: String?, scriptType: ScriptType, value: Int, feeRate: Int, sortType: TransactionDataSortType, rbfEnabled: Bool, unspentOutputs: [UnspentOutputInfo]?, unlockedHeight: Int? = nil, reverseHex: String? = nil) throws -> FullTransaction {
+    internal func redeem(from unspentOutput: UnspentOutput, params: SendParameters) throws -> FullTransaction {
         guard let transactionCreator else {
             throw CoreError.readOnlyCore
         }
-
-        let outputs = unspentOutputs.map { $0.outputs(from: unspentOutputSelector.all) }
-        let toAddress = try addressConverter.convert(lockingScriptPayload: hash, type: scriptType)
-        return try transactionCreator.create(to: toAddress.stringValue, memo: memo, value: value, feeRate: feeRate, senderPay: true, sortType: sortType, rbfEnabled: rbfEnabled, unspentOutputs: outputs, pluginData: [:], unlockedHeight: unlockedHeight, reverseHex: reverseHex)
+        return try transactionCreator.create(from: unspentOutput, params: params)
     }
 
-    internal func redeem(from unspentOutput: UnspentOutput, memo: String?, to address: String, feeRate: Int, sortType: TransactionDataSortType, rbfEnabled: Bool) throws -> FullTransaction {
+    func createRawTransaction(params: SendParameters) throws -> Data {
         guard let transactionCreator else {
             throw CoreError.readOnlyCore
         }
-
-        return try transactionCreator.create(from: unspentOutput, to: address, memo: memo, feeRate: feeRate, sortType: sortType, rbfEnabled: rbfEnabled, unlockedHeight: nil, reverseHex: nil)
-    }
-
-    func createRawTransaction(to address: String, memo: String?, value: Int, feeRate: Int, sortType: TransactionDataSortType, rbfEnabled: Bool, unspentOutputs: [UnspentOutput]?, pluginData: [UInt8: IPluginData] = [:]) throws -> Data {
-        guard let transactionCreator else {
-            throw CoreError.readOnlyCore
-        }
-
-        return try transactionCreator.createRawTransaction(to: address, memo: memo, value: value, feeRate: feeRate, senderPay: true, sortType: sortType, rbfEnabled: rbfEnabled, unspentOutputs: unspentOutputs, pluginData: pluginData, unlockedHeight: nil, reverseHex: nil)
+        return try transactionCreator.createRawTransaction(params: params)
     }
 
     func validate(address: String, pluginData: [UInt8: IPluginData] = [:]) throws {
@@ -240,33 +228,45 @@ public extension BitcoinCore {
         paymentAddressParser.parse(paymentAddress: paymentAddress)
     }
 
-    func sendInfo(for value: Int, toAddress: String? = nil, memo: String?, feeRate: Int, unspentOutputs: [UnspentOutput]?, pluginData: [UInt8: IPluginData] = [:]) throws -> BitcoinSendInfo {
+    func sendInfo(params: SendParameters) throws -> BitcoinSendInfo {
         guard let transactionFeeCalculator else {
             throw CoreError.readOnlyCore
         }
 
-        return try transactionFeeCalculator.sendInfo(for: value, feeRate: feeRate, senderPay: true, toAddress: toAddress, memo: memo, unspentOutputs: unspentOutputs, pluginData: pluginData)
+//        if let t = try transactionBuilder?.buildTransaction(params: params) {
+//            print(TransactionSerializer.serialize(transaction: t.build()).hs.hex)
+//        }
+        return try transactionFeeCalculator.sendInfo(params: params)
     }
 
-    func maxSpendableValue(toAddress: String? = nil, memo: String?, feeRate: Int, unspentOutputs: [UnspentOutputInfo]?, pluginData: [UInt8: IPluginData] = [:]) throws -> Int {
+    func maxSpendableValue(params: SendParameters) throws -> Int {
         guard let transactionFeeCalculator else {
             throw CoreError.readOnlyCore
         }
 
-        let outputs = unspentOutputs.map { $0.outputs(from: unspentOutputSelector.all) }
-        let balance = outputs.map { $0.map(\.output.value).reduce(0, +) } ?? balance.spendable
+        let balance: Int
+        if params.unspentOutputs == nil, !params.utxoFilters.isEmpty {
+            balance = self.balance.spendable
+        } else {
+            let allSpendable = unspentOutputSelector.allSpendable(filters: params.utxoFilters)
+            let outputs: [UnspentOutput] = params.unspentOutputs.map { $0.outputs(from: allSpendable) } ?? allSpendable
+            balance = outputs.map(\.output.value).reduce(0, +)
+        }
 
-        let sendAllFee = try transactionFeeCalculator.sendInfo(for: balance, feeRate: feeRate, senderPay: false, toAddress: toAddress, memo: memo, unspentOutputs: outputs, pluginData: pluginData).fee
+        params.value = balance
+        params.senderPay = false
+        let sendAllFee = try transactionFeeCalculator.sendInfo(params: params).fee
+
         return max(0, balance - sendAllFee)
     }
 
-    func minSpendableValue(toAddress: String? = nil) throws -> Int {
+    func minSpendableValue(params: SendParameters) throws -> Int {
         guard let dustCalculator else {
             throw CoreError.readOnlyCore
         }
 
         var scriptType = ScriptType.p2pkh
-        if let addressStr = toAddress, let address = try? addressConverter.convert(address: addressStr) {
+        if let address = params.address, let address = try? addressConverter.convert(address: address) {
             scriptType = address.scriptType
         }
 
@@ -351,7 +351,7 @@ public extension BitcoinCore {
                 peerStatus.append(("status", initialDownload.isSynced(peer: peer) ? "synced" : "not synced"))
                 peerStatus.append(("host", peer.host))
                 peerStatus.append(("best block", peer.announcedLastBlockHeight))
-                peerStatus.append(("user agent", peer.announcedLastBlockHeight))
+                peerStatus.append(("user agent", peer.subVersion))
 
                 let tasks = peer.tasks
                 if tasks.isEmpty {
@@ -461,6 +461,11 @@ public extension BitcoinCore {
         }
     }
 
+    enum SendType {
+        case p2p
+        case api(blockchairApi: BlockchairApi)
+    }
+
     enum TransactionFilter {
         case p2shOutput(scriptHash: Data)
         case outpoint(transactionHash: Data, outputIndex: Int)
@@ -491,5 +496,89 @@ public extension BitcoinCore {
 
     enum StateError: Error {
         case notStarted
+    }
+}
+
+public extension BitcoinCore {
+    static func firstAddress(seed: Data, purpose: Purpose, network: INetwork, addressCoverter: AddressConverterChain) throws -> Address {
+        let wallet = HDWallet(seed: seed, coinType: network.coinType, xPrivKey: network.xPrivKey, purpose: purpose)
+        let publicKey: PublicKey = try wallet.publicKey(account: 0, index: 0, external: true)
+
+        return try addressCoverter.convert(publicKey: publicKey, type: purpose.scriptType)
+    }
+
+    static func firstAddress(extendedKey: HDExtendedKey, purpose: Purpose, network: INetwork, addressCoverter: AddressConverterChain) throws -> Address {
+        let publicKey: PublicKey
+        switch extendedKey {
+        case let .private(key: privateKey):
+            switch extendedKey.derivedType {
+            case .master:
+                let wallet = HDWallet(masterKey: privateKey, coinType: network.coinType, purpose: purpose)
+                publicKey = try wallet.publicKey(account: 0, index: 0, external: true)
+            case .account:
+                let wallet = HDAccountWallet(privateKey: privateKey)
+                publicKey = try wallet.publicKey(index: 0, external: true)
+            case .bip32:
+                throw BitcoinCoreBuilder.BuildError.notSupported
+            }
+
+        case let .public(key: hdPublicKey):
+            let wallet = HDWatchAccountWallet(publicKey: hdPublicKey)
+            publicKey = try wallet.publicKey(index: 0, external: true)
+        }
+
+        return try addressCoverter.convert(publicKey: publicKey, type: purpose.scriptType)
+    }
+}
+
+public class SendParameters {
+    public var address: String?
+    public var value: Int?
+    public var feeRate: Int?
+    public var sortType: TransactionDataSortType
+    public var senderPay: Bool
+    public var rbfEnabled: Bool
+    public var memo: String?
+    public var unspentOutputs: [UnspentOutputInfo]?
+    public var pluginData: [UInt8: IPluginData]
+    public var utxoFilters: UtxoFilters
+    public var maxOutputsCountForInputs: Int?
+    public var changeToFirstInput: Bool
+    public var unlockedHeight: Int? // safe
+    public var reverseHex: String? // safe
+    public init(
+        address: String? = nil, value: Int? = nil, feeRate: Int? = nil, sortType: TransactionDataSortType = .none,
+        senderPay: Bool = true, rbfEnabled: Bool = true, memo: String? = nil,
+        unspentOutputs: [UnspentOutputInfo]? = nil, pluginData: [UInt8: IPluginData] = [:],
+        utxoFilters: UtxoFilters = UtxoFilters(), changeToFirstInput: Bool = false,
+        unlockedHeight: Int? = nil, reverseHex: String? = nil
+    ) {
+        self.address = address
+        self.value = value
+        self.feeRate = feeRate
+        self.sortType = sortType
+        self.senderPay = senderPay
+        self.rbfEnabled = rbfEnabled
+        self.memo = memo
+        self.unspentOutputs = unspentOutputs
+        self.pluginData = pluginData
+        self.utxoFilters = utxoFilters
+        self.changeToFirstInput = changeToFirstInput
+        self.unlockedHeight = unlockedHeight
+        self.reverseHex = reverseHex
+    }
+}
+
+public struct UtxoFilters {
+    public let scriptTypes: [ScriptType]?
+    public let maxOutputsCountForInputs: Int?
+
+    public init(scriptTypes: [ScriptType]? = nil, maxOutputsCountForInputs: Int? = nil) {
+        self.scriptTypes = scriptTypes
+        self.maxOutputsCountForInputs = maxOutputsCountForInputs
+    }
+
+    public var isEmpty: Bool {
+        scriptTypes == nil && maxOutputsCountForInputs == nil
     }
 }

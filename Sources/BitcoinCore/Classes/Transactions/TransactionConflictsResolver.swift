@@ -10,7 +10,7 @@ class TransactionConflictsResolver {
             .map { input in
                 storage.inputsUsing(previousOutputTxHash: input.previousOutputTxHash, previousOutputIndex: input.previousOutputIndex)
                     .filter { $0.transactionHash != transaction.header.dataHash }
-                    .map { $0.transactionHash }
+                    .map(\.transactionHash)
             }
             .flatMap { $0 }
 
@@ -63,7 +63,21 @@ extension TransactionConflictsResolver: ITransactionConflictsResolver {
             // and the existing transaction is a replacement transaction that is not relayed in mempool yet.
             // Other cases are theoretically possible, but highly unlikely
             .filter { !existingHasHigherSequence(mempoolTransaction: transaction, existingTransaction: $0) }
-            .map { $0.header }
+            .map(\.header)
+    }
+
+    // Checks if the transactions has a conflicting input with higher sequence
+    func isTransactionReplaced(transaction: FullTransaction) -> Bool {
+        let conflictingTransactions = conflictingTransactions(for: transaction)
+
+        guard !conflictingTransactions.isEmpty, conflictingTransactions.allSatisfy({ $0.blockHash == nil }) else {
+            return false
+        }
+
+        let conflictingFullTransactions = storage.fullTransactions(from: conflictingTransactions)
+
+        return conflictingFullTransactions
+            .contains { existingHasHigherSequence(mempoolTransaction: transaction, existingTransaction: $0) }
     }
 
     func incomingPendingTransactionsConflicting(with transaction: FullTransaction) -> [Transaction] {

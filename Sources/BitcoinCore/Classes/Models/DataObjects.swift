@@ -27,6 +27,10 @@ open class FullTransaction {
     public let outputs: [Output]
     public let metaData = TransactionMetadata()
 
+    lazy var uid: String = {
+        Crypto.sha256(header.dataHash).hs.hexString
+    }()
+
     public init(header: Transaction, inputs: [Input], outputs: [Output], forceHashUpdate: Bool = true) {
         self.header = header
         self.inputs = inputs
@@ -105,9 +109,9 @@ public struct UnspentOutputInfo: Hashable, Equatable {
     public let address: String?
     public let value: Int
 
-    public static func ==(lhs: UnspentOutputInfo, rhs: UnspentOutputInfo) -> Bool {
+    public static func == (lhs: UnspentOutputInfo, rhs: UnspentOutputInfo) -> Bool {
         lhs.outputIndex == rhs.outputIndex &&
-        lhs.transactionHash == rhs.transactionHash
+            lhs.transactionHash == rhs.transactionHash
     }
 
     public func hash(into hasher: inout Hasher) {
@@ -116,7 +120,7 @@ public struct UnspentOutputInfo: Hashable, Equatable {
     }
 }
 
-public extension Array where Element == UnspentOutputInfo {
+public extension [UnspentOutputInfo] {
     func outputs(from outputs: [UnspentOutput]) -> [UnspentOutput] {
         let selectedKeys = map { ($0.outputIndex, $0.transactionHash) }
         return outputs.filter { output in
@@ -134,13 +138,15 @@ public struct FullTransactionForInfo {
     let metaData: TransactionMetadata
 
     var rawTransaction: String {
-        let fullTransaction = FullTransaction(
+        TransactionSerializer.serialize(transaction: fullTransaction).hs.hex
+    }
+
+    var fullTransaction: FullTransaction {
+        .init(
             header: transactionWithBlock.transaction,
             inputs: inputsWithPreviousOutputs.map(\.input),
             outputs: outputs
         )
-
-        return TransactionSerializer.serialize(transaction: fullTransaction).hs.hex
     }
 }
 

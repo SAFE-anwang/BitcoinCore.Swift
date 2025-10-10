@@ -1,4 +1,5 @@
 import Foundation
+import HsToolKit
 
 class TransactionCreator {
     enum CreationError: Error {
@@ -10,13 +11,15 @@ class TransactionCreator {
     private let transactionSender: ITransactionSender
     private let transactionSigner: TransactionSigner
     private let bloomFilterManager: IBloomFilterManager
+    private let logger: Logger
 
-    init(transactionBuilder: ITransactionBuilder, transactionProcessor: IPendingTransactionProcessor, transactionSender: ITransactionSender, transactionSigner: TransactionSigner, bloomFilterManager: IBloomFilterManager) {
+    init(transactionBuilder: ITransactionBuilder, transactionProcessor: IPendingTransactionProcessor, transactionSender: ITransactionSender, transactionSigner: TransactionSigner, bloomFilterManager: IBloomFilterManager, logger: Logger) {
         self.transactionBuilder = transactionBuilder
         self.transactionProcessor = transactionProcessor
         self.transactionSender = transactionSender
         self.transactionSigner = transactionSigner
         self.bloomFilterManager = bloomFilterManager
+        self.logger = logger
     }
 
     private func processAndSend(transaction: FullTransaction) throws {
@@ -25,6 +28,7 @@ class TransactionCreator {
         do {
             try transactionProcessor.processCreated(transaction: transaction)
         } catch _ as BloomFilterManager.BloomFilterExpired {
+            logger.debug("Forcing bloom filter regeneration", context: ["Send", transaction.uid], save: true)
             bloomFilterManager.regenerateBloomFilter()
         }
 
@@ -34,36 +38,13 @@ class TransactionCreator {
 
 extension TransactionCreator: ITransactionCreator {
 
-    func create(to address: String, memo: String?, value: Int, feeRate: Int, senderPay: Bool, sortType: TransactionDataSortType, rbfEnabled: Bool, unspentOutputs: [UnspentOutput]?, pluginData: [UInt8: IPluginData] = [:], unlockedHeight: Int?, reverseHex: String?) throws -> FullTransaction {
-        let mutableTransaction = try transactionBuilder.buildTransaction(
-            toAddress: address,
-            memo: memo,
-            value: value,
-            feeRate: feeRate,
-            senderPay: senderPay,
-            sortType: sortType,
-            rbfEnabled: rbfEnabled,
-            unspentOutputs: unspentOutputs,
-            pluginData: pluginData,
-            unlockedHeight: unlockedHeight,
-            reverseHex: reverseHex
-        )
-
+    func create(params: SendParameters) throws -> FullTransaction {
+        let mutableTransaction = try transactionBuilder.buildTransaction(params: params)
         return try create(from: mutableTransaction)
     }
 
-    func create(from unspentOutput: UnspentOutput, to address: String, memo: String?, feeRate: Int, sortType: TransactionDataSortType, rbfEnabled: Bool, unlockedHeight: Int?, reverseHex: String?) throws -> FullTransaction {
-        let mutableTransaction = try transactionBuilder.buildTransaction(
-            from: unspentOutput,
-            toAddress: address,
-            memo: memo,
-            feeRate: feeRate,
-            sortType: sortType,
-            rbfEnabled: rbfEnabled,
-            unlockedHeight: unlockedHeight,
-            reverseHex: reverseHex
-        )
-
+    func create(from unspentOutput: UnspentOutput, params: SendParameters) throws -> FullTransaction {
+        let mutableTransaction = try transactionBuilder.buildTransaction(from: unspentOutput, params: params)
         return try create(from: mutableTransaction)
     }
 
@@ -71,24 +52,13 @@ extension TransactionCreator: ITransactionCreator {
         try transactionSigner.sign(mutableTransaction: mutableTransaction)
         let fullTransaction = mutableTransaction.build()
 
+        logger.debug("Sending", context: ["Send", fullTransaction.uid], save: true)
         try processAndSend(transaction: fullTransaction)
         return fullTransaction
     }
 
-    func createRawTransaction(to address: String, memo: String?, value: Int, feeRate: Int, senderPay: Bool, sortType: TransactionDataSortType, rbfEnabled: Bool, unspentOutputs: [UnspentOutput]?, pluginData: [UInt8: IPluginData] = [:], unlockedHeight: Int?, reverseHex: String?) throws -> Data {
-        let mutableTransaction = try transactionBuilder.buildTransaction(
-            toAddress: address,
-            memo: memo,
-            value: value,
-            feeRate: feeRate,
-            senderPay: senderPay,
-            sortType: sortType,
-            rbfEnabled: rbfEnabled,
-            unspentOutputs: unspentOutputs,
-            pluginData: pluginData,
-            unlockedHeight: unlockedHeight,
-            reverseHex: reverseHex
-        )
+    func createRawTransaction(params: SendParameters) throws -> Data {
+        let mutableTransaction = try transactionBuilder.buildTransaction(params: params)
         try transactionSigner.sign(mutableTransaction: mutableTransaction)
         let fullTransaction = mutableTransaction.build()
 
