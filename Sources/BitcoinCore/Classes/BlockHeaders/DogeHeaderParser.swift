@@ -21,6 +21,8 @@ public class DogeHeaderParser {
         if let offset = abnormalData(data: payload), offset > 0 {
             let headerCount = 80
             if offset - headerCount > 0 {
+                // 检查是否有足够的可用字节
+                guard byteStream.availableBytes >= offset - headerCount else { return nil }
                 byteStream.read(Data.self, count: offset - headerCount)
             }
             return nil
@@ -28,54 +30,86 @@ public class DogeHeaderParser {
     
         // Parent Block Coinbase Transaction
         /// version
+        guard byteStream.availableBytes >= MemoryLayout<Int32>.size else { return nil }
         let _ = Int(byteStream.read(Int32.self))
+        
+        // 读取 txInCount
+        guard byteStream.availableBytes >= 1 else { return nil }
         let txInCount = byteStream.read(VarInt.self)
         for _ in 0 ..< txInCount.underlyingValue {
             /// previousOut
+            guard byteStream.availableBytes >= 36 else { return nil }
             let _ = byteStream.read(Data.self, count: 36)
+            
+            // 读取 scriptSize
+            guard byteStream.availableBytes >= 1 else { return nil }
             let scriptSize = Int(byteStream.read(VarInt.self).underlyingValue)
+            
             /// scriptData
+            guard byteStream.availableBytes >= scriptSize else { return nil }
             let _ = byteStream.read(Data.self, count: scriptSize)
+            
             /// sequenceNumber
+            guard byteStream.availableBytes >= MemoryLayout<Int32>.size else { return nil }
             let _ = byteStream.read(Int32.self)
         }
         
+        // 读取 txOutCount
+        guard byteStream.availableBytes >= 1 else { return nil }
         let txOutCount = byteStream.read(VarInt.self)
         for _ in 0 ..< txOutCount.underlyingValue {
             /// amount
+            guard byteStream.availableBytes >= MemoryLayout<UInt64>.size else { return nil }
             let _ = byteStream.read(UInt64.self)
+            
+            // 读取 scriptSize
+            guard byteStream.availableBytes >= 1 else { return nil }
             let scriptSize = Int(byteStream.read(VarInt.self).underlyingValue)
+            
             /// scriptData
+            guard byteStream.availableBytes >= scriptSize else { return nil }
             let _ = byteStream.read(Data.self, count: scriptSize)
         }
+        
         /// lockTime
+        guard byteStream.availableBytes >= MemoryLayout<UInt32>.size else { return nil }
         let _ = byteStream.read(UInt32.self)
         
         // Coinbase Link
         
+        guard byteStream.availableBytes >= 32 else { return nil }
         let parentHeaderHash = byteStream.read(Data.self, count: 32)
-        ///  Number of links in branch
+        
+        /// Number of links in branch
+        guard byteStream.availableBytes >= 1 else { return nil }
         let numberOfHashes = byteStream.read(VarInt.self)
         var coinbaseLinkHashes = [Data]()
         for _ in 0 ..< numberOfHashes.underlyingValue {
+            guard byteStream.availableBytes >= 32 else { return nil }
             coinbaseLinkHashes.append(byteStream.read(Data.self, count: 32))
         }
         
         /// Branch sides bitmask
+        guard byteStream.availableBytes >= MemoryLayout<Int32>.size else { return nil }
         let _ = Int(byteStream.read(Int32.self))
         
         // Aux Blockchain Link
         
         /// Number of links in branch
+        guard byteStream.availableBytes >= 1 else { return nil }
         let numberOfLinks = byteStream.read(VarInt.self)
         var auxBlockchainLinkHashes = [Data]()
         for _ in 0 ..< numberOfLinks.underlyingValue {
+            guard byteStream.availableBytes >= 32 else { return nil }
             auxBlockchainLinkHashes.append(byteStream.read(Data.self, count: 32))
         }
+        
         /// Aux Branch sides bitmask
+        guard byteStream.availableBytes >= MemoryLayout<Int32>.size else { return nil }
         let _ = Int(byteStream.read(Int32.self))
         
         // Parent Block Header
+        guard byteStream.availableBytes >= 80 else { return nil }
         let parentBlockHeader = byteStream.read(Data.self, count: 80)
         
         return DogeHeaderData(

@@ -181,18 +181,37 @@ class MerkleBlockMessageParser: IMessageParser {
 
         let blockHeader = blockHeaderParser.parse(byteStream: byteStream)
 
+        guard byteStream.availableBytes >= MemoryLayout<UInt32>.size else {
+            return MerkleBlockMessage(blockHeader: blockHeader, totalTransactions: 0, numberOfHashes: VarInt(0), hashes: [], numberOfFlags: VarInt(0), flags: [])
+        }
+
         let totalTransactions = byteStream.read(UInt32.self)
+
+        guard byteStream.availableBytes >= 1 else {
+            return MerkleBlockMessage(blockHeader: blockHeader, totalTransactions: totalTransactions, numberOfHashes: VarInt(0), hashes: [], numberOfFlags: VarInt(0), flags: [])
+        }
+
         let numberOfHashes = byteStream.read(VarInt.self)
 
         var hashes = [Data]()
         for _ in 0 ..< numberOfHashes.underlyingValue {
+            guard byteStream.availableBytes >= 32 else {
+                break
+            }
             hashes.append(byteStream.read(Data.self, count: 32))
+        }
+
+        guard byteStream.availableBytes >= 1 else {
+            return MerkleBlockMessage(blockHeader: blockHeader, totalTransactions: totalTransactions, numberOfHashes: numberOfHashes, hashes: hashes, numberOfFlags: VarInt(0), flags: [])
         }
 
         let numberOfFlags = byteStream.read(VarInt.self)
 
         var flags = [UInt8]()
         for _ in 0 ..< numberOfFlags.underlyingValue {
+            guard byteStream.availableBytes >= 1 else {
+                break
+            }
             flags.append(byteStream.read(UInt8.self))
         }
 
