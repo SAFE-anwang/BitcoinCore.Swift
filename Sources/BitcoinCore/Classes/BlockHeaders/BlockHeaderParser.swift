@@ -19,7 +19,7 @@ class BlockHeaderParser: IBlockHeaderParser {
         let headerData = byteStream.data.prefix(80)
         let headerHash = hasher.hash(data: headerData)
         
-        DogeHeaderParser.decodeHeader(byteStream: byteStream)
+        _ = DogeHeaderParser.decodeHeader(byteStream: byteStream)
         
         return BlockHeader(
             version: version, headerHash: headerHash, previousBlockHeaderHash: previousBlockHeaderHash, merkleRoot: merkleRoot,
