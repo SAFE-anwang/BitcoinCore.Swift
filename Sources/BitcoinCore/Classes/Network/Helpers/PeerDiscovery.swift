@@ -3,13 +3,21 @@ import Foundation
 class PeerDiscovery: IPeerDiscovery {
     weak var peerAddressManager: IPeerAddressManager?
     private var inProgress = false
+    private let stateQueue = DispatchQueue(label: "io.horizontalsystems.bitcoin-core.peer-discovery-state", qos: .background)
 
-    func lookup(dnsSeeds: [String]) {
-        guard !inProgress else {
-            return
+    func lookup(dnsSeeds: [String]) -> Bool {
+        let started = stateQueue.sync { () -> Bool in
+            guard !inProgress else {
+                return false
+            }
+
+            inProgress = true
+            return true
         }
 
-        inProgress = true
+        guard started else {
+            return false
+        }
 
         DispatchQueue.global(qos: .background).async { [weak self] in
             for seed in dnsSeeds {
@@ -18,8 +26,12 @@ class PeerDiscovery: IPeerDiscovery {
                 }
             }
 
-            self?.inProgress = false
+            self?.stateQueue.sync {
+                self?.inProgress = false
+            }
         }
+
+        return true
     }
 
     private func _lookup(dnsSeed: String) -> [String] {

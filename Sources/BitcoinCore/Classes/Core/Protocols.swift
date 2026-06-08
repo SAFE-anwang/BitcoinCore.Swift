@@ -281,7 +281,7 @@ protocol IPeerAddressManagerDelegate: AnyObject {
 
 protocol IPeerDiscovery {
     var peerAddressManager: IPeerAddressManager? { get set }
-    func lookup(dnsSeeds: [String])
+    func lookup(dnsSeeds: [String]) -> Bool
 }
 
 protocol IFactory {

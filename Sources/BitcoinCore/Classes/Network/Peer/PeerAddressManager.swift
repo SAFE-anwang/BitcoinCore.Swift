@@ -10,6 +10,7 @@ class PeerAddressManager {
     private let state: PeerAddressManagerState
     private let logger: Logger?
     private let queue = DispatchQueue(label: "io.horizontalsystems.bitcoin-core.peer-address-manager", qos: .background)
+    private var lookupCount = 0
 
     init(storage: IStorage, network: INetwork, peerDiscovery: IPeerDiscovery, state: PeerAddressManagerState = PeerAddressManagerState(), logger: Logger? = nil) {
         self.storage = storage
@@ -22,30 +23,42 @@ class PeerAddressManager {
 
 extension PeerAddressManager: IPeerAddressManager {
     var ip: String? {
-        guard let ip = network.isSafe() ? storage.leastScoreFastestPeerAddressSafe(excludingIps: state.usedIps)?.ip : storage.leastScoreFastestPeerAddress(excludingIps: state.usedIps)?.ip else {
-            peerDiscovery.lookup(dnsSeeds: network.dnsSeeds)
-            return nil
-        }
-        
-        if network.isSafe(), !network.isMainNode(ip: ip), let _ip = network.getMainNodeIp(list: state.usedIps) {
-            queue.sync {
-                state.add(usedIp: _ip)
+        queue.sync {
+            let usedIps = state.usedIps
+            var peerAddress = network.isSafe() ? storage.leastScoreFastestPeerAddressSafe(excludingIps: usedIps) : storage.leastScoreFastestPeerAddress(excludingIps: usedIps)
+
+            if network.isSafe(), !network.isMainNode(ip: peerAddress?.ip) {
+                if let ip = network.getMainNodeIp(list: usedIps) {
+                    lookupCount = 0
+                    state.add(usedIp: ip)
+                    return ip
+                }
+
+                peerAddress = storage.leastScoreFastestPeerAddress(excludingIps: usedIps)
             }
-            return _ip
-        }else {
-            queue.sync {
-                state.add(usedIp: ip)
+
+            guard let ip = peerAddress?.ip else {
+                if lookupCount < 20, peerDiscovery.lookup(dnsSeeds: network.dnsSeeds) {
+                    lookupCount += 1
+                }
+
+                return nil
             }
+
+            lookupCount = 0
+            state.add(usedIp: ip)
             return ip
         }
     }
 
     var hasFreshIps: Bool {
-        guard let peerAddress = storage.leastScoreFastestPeerAddress(excludingIps: state.usedIps) else {
-            return false
-        }
+        queue.sync {
+            guard let peerAddress = storage.leastScoreFastestPeerAddress(excludingIps: state.usedIps) else {
+                return false
+            }
 
-        return peerAddress.connectionTime == nil
+            return peerAddress.connectionTime == nil
+        }
     }
 
     func markSuccess(ip: String) {
@@ -77,6 +90,7 @@ extension PeerAddressManager: IPeerAddressManager {
 
         logger?.debug("Adding new addresses: \(newAddresses.count)")
         queue.sync {
+            lookupCount = 0
             storage.save(peerAddresses: newAddresses)
         }
 
