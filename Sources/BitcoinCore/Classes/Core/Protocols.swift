@@ -163,6 +163,33 @@ public protocol IStorage: IOutputStorage {
     func publicKey(byPath: String) -> PublicKey?
 }
 
+// 交易分页查询时的预过滤类型。SAFE3 reserve 过滤下推到存储层：
+// - 若 storage 实现了 `ISafe3FilteredStorage`（如 GrdbStorage），可下推到 SQL 层
+// - 若 storage 未实现该协议，DataProvider 在内存里二次过滤
+//
+// 协议 IStorage 公共签名未变，自定义 IStorage 实现不需要任何修改即可继续工作。
+public enum TransactionFilterKind {
+    case none                        // 不过滤（默认，行为与原版一致）
+    case safe3ReserveOnly            // SAFE3: 只保留所有 output 都是 SAFE3 reserve 的交易
+}
+
+/// 存储层 SAFE3 过滤的"可选"协议。
+///
+/// 实现者可选择实现：GrdbStorage 通过 override 把 safe3ReserveOnly 下推到 SQL 层。
+/// 未实现的 IStorage 走 DataProvider 内存里的二次过滤，行为完全等价。
+///
+/// 独立成单独协议的原因：
+/// 1. 不破坏 IStorage 公共签名（外部自定义 IStorage 实现不需要跟着改）
+/// 2. Swift dynamic dispatch 需要方法在协议里才能 override，否则会走 extension 的 static
+///    dispatch，override 不生效
+public protocol ISafe3FilteredStorage: IStorage {
+    func fullInfo(forTransactions: [TransactionWithBlock], transactionFilterKind: TransactionFilterKind) -> [FullTransactionForInfo]
+    func validOrInvalidTransactionsFullInfo(
+        fromTimestamp: Int?, fromOrder: Int?, descending: Bool,
+        type: TransactionFilterType?, limit: Int?, transactionFilterKind: TransactionFilterKind
+    ) -> [FullTransactionForInfo]
+}
+
 public protocol IRestoreKeyConverter {
     func keysForApiRestore(publicKey: PublicKey) -> [String]
     func bloomFilterElements(publicKey: PublicKey) -> [Data]
@@ -281,7 +308,7 @@ protocol IPeerAddressManagerDelegate: AnyObject {
 
 protocol IPeerDiscovery {
     var peerAddressManager: IPeerAddressManager? { get set }
-    func lookup(dnsSeeds: [String])
+    func lookup(dnsSeeds: [String]) -> Bool
 }
 
 protocol IFactory {
@@ -449,6 +476,12 @@ public protocol IUnspentOutputProvider {
 
 public protocol IBalanceProvider {
     var balanceInfo: BalanceInfo { get }
+}
+
+// 默认 no-op 实现：保持向后兼容（外部 IBalanceProvider 实现不需要修改即可编译）。
+// UnspentOutputProvider 通过覆盖此方法提供真正的缓存失效逻辑。
+public extension IBalanceProvider {
+    func invalidateCache() {}
 }
 
 public protocol IBlockSyncer: AnyObject {

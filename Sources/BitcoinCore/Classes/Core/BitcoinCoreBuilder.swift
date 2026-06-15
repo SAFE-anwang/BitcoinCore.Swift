@@ -161,10 +161,21 @@ public class BitcoinCoreBuilder {
 
         plugins.forEach { pluginManager.add(plugin: $0) }
 
-        let unspentOutputProvider = UnspentOutputProvider(storage: storage, pluginManager: pluginManager, confirmationsThreshold: confirmationsThreshold)
+        // 仅在 SAFE 网络注入 reserve 过滤回调 + 开启 UnspentOutputProvider 的 reserve 过滤；
+        // 其他 token 走 nil/false 路径，零额外开销、零行为变化。
+        let transactionFilter: ((FullTransactionForInfo) -> Bool)? = network.isSafe()
+            ? { Safe3OutputFilter.hasOnlySupportedReserves(in: $0) }
+            : nil
+        let enableSafe3ReserveFilter = network.isSafe()
+        let unspentOutputProvider = UnspentOutputProvider(
+            storage: storage,
+            pluginManager: pluginManager,
+            confirmationsThreshold: confirmationsThreshold,
+            enableSafe3ReserveFilter: enableSafe3ReserveFilter
+        )
         var transactionInfoConverter = transactionInfoConverter ?? TransactionInfoConverter()
         transactionInfoConverter.baseTransactionInfoConverter = BaseTransactionInfoConverter(pluginManager: pluginManager)
-        let dataProvider = DataProvider(storage: storage, balanceProvider: unspentOutputProvider, transactionInfoConverter: transactionInfoConverter)
+        let dataProvider = DataProvider(storage: storage, balanceProvider: unspentOutputProvider, transactionInfoConverter: transactionInfoConverter, transactionFilter: transactionFilter)
 
         let reachabilityManager = ReachabilityManager()
 

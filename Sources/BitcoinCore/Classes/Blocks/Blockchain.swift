@@ -37,10 +37,11 @@ extension Blockchain: IBlockchain {
         listener?.onInsert(block: block)
 
         if block.height % 2016 == 0 {
-            storage.deleteUselessBlocks(before: block.height - 2016)
-            // Execute releaseMemory() asynchronously on a background thread to avoid priority inversion
-            DispatchQueue.global(qos: .background).async {
-                self.storage.releaseMemory()
+            // 把整个周期清理工作都放到后台，避免阻塞 block sync 线程
+            DispatchQueue.global(qos: .background).async { [storage] in
+                storage.deleteUselessBlocks(before: block.height - 2016)
+                // Execute releaseMemory() asynchronously on a background thread to avoid priority inversion
+                storage.releaseMemory()
             }
         }
 

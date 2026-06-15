@@ -1048,6 +1048,23 @@ extension GrdbStorage: IStorage {
         return results
     }
 
+    /// ISafe3FilteredStorage 实现：在 fullInfo JOIN 之前先按 SAFE3 reserve 过滤掉
+    /// 不可见交易。这样 onUpdate 热路径上不需要再为 SAFE3 锁仓交易做完整的 input/output/metadata
+    /// JOIN，也不会进内存再做一次 transactionInfoConverter 转换。
+    ///
+    /// - SAFE 网络：transactionFilterKind = .safe3ReserveOnly → 在 SQL 层做白名单过滤
+    /// - 非 SAFE：transactionFilterKind = .none → 走原版实现，零额外开销
+    public func fullInfo(forTransactions transactionsWithBlocks: [TransactionWithBlock], transactionFilterKind: TransactionFilterKind) -> [FullTransactionForInfo] {
+        switch transactionFilterKind {
+        case .none:
+            return fullInfo(forTransactions: transactionsWithBlocks)
+        case .safe3ReserveOnly:
+            let filteredHashes = filteredTransactionHashes(forReserveOnly: true, from: transactionsWithBlocks.map { $0.transaction.dataHash })
+            let filtered = transactionsWithBlocks.filter { filteredHashes.contains($0.transaction.dataHash) }
+            return fullInfo(forTransactions: filtered)
+        }
+    }
+
     public func transactionFullInfo(byHash hash: Data) -> FullTransactionForInfo? {
         var transaction: TransactionWithBlock? = nil
 
@@ -1078,7 +1095,7 @@ extension GrdbStorage: IStorage {
         return fullInfo(forTransactions: [transactionWithBlock]).first
     }
 
-    public func validOrInvalidTransactionsFullInfo(fromTimestamp: Int?, fromOrder: Int?, descending: Bool, type: TransactionFilterType?, limit: Int?) -> [FullTransactionForInfo] {
+    public func validOrInvalidTransactionsFullInfo(fromTimestamp: Int?, fromOrder: Int?, descending: Bool, type: TransactionFilterType?, limit: Int?, transactionFilterKind: TransactionFilterKind) -> [FullTransactionForInfo] {
         var transactions = [TransactionWithBlock]()
 
         try! dbPool.read { db in
@@ -1104,6 +1121,26 @@ extension GrdbStorage: IStorage {
             if let filterType = type {
                 let filters = filterType.types.map { "transaction_metadata.type == \($0.rawValue)" }.joined(separator: " OR ")
                 whereConditions.append("(\(filters))")
+            }
+
+            // SAFE3 reserve filter: 下推到 SQL 层。
+            // 排除任何 output 含 non-SAFE3 reserve 的交易。
+            // 等价于 Safe3OutputFilter.hasOnlySupportedReserves(in:)。
+            if transactionFilterKind == .safe3ReserveOnly {
+                let plain = Safe3OutputFilter.plainSafeReserveHex
+                let coinbase = Safe3OutputFilter.coinbaseReserveHex
+                let memoLen = Safe3OutputFilter.memoReservePrefixLength
+                let memo = Safe3OutputFilter.memoReservePrefixHex
+                whereConditions.append("""
+                NOT EXISTS (
+                    SELECT 1 FROM outputs
+                    WHERE outputs.transactionHash = transactions.dataHash
+                    AND outputs.reserve IS NOT NULL
+                    AND outputs.reserve != X'\(plain)'
+                    AND outputs.reserve != X'\(coinbase)'
+                    AND (length(outputs.reserve) < \(memoLen) OR substr(outputs.reserve, 1, \(memoLen)) != X'\(memo)')
+                )
+                """)
             }
 
             if whereConditions.count > 0 {
@@ -1134,6 +1171,18 @@ extension GrdbStorage: IStorage {
         }
 
         return fullInfo(forTransactions: transactions)
+    }
+
+    // IStorage 协议要求的 6 参数版本（不带 transactionFilterKind）。
+    // 内部委托给 7 参数版本，传 .none 保持原版行为（非 SAFE 网络 / 旧 IStorage 实现）。
+    // 不破坏 IStorage 公共签名。
+    public func validOrInvalidTransactionsFullInfo(
+        fromTimestamp: Int?, fromOrder: Int?, descending: Bool, type: TransactionFilterType?, limit: Int?
+    ) -> [FullTransactionForInfo] {
+        return validOrInvalidTransactionsFullInfo(
+            fromTimestamp: fromTimestamp, fromOrder: fromOrder, descending: descending,
+            type: type, limit: limit, transactionFilterKind: .none
+        )
     }
 
     public func moveTransactionsTo(invalidTransactions: [InvalidTransaction]) throws {
@@ -1177,7 +1226,14 @@ extension GrdbStorage: IStorage {
 
     public func unspentOutputs() -> [UnspentOutput] {
         try! dbPool.read { db in
+            // 把已花费的 (txHash, index) 提前索引成 [Data: Set<Int>]，
+            // 把原本 O(N×M) 的 contains(where:) 线性扫描降到 O(N+M) 查表。
             let inputs = try Input.fetchAll(db)
+            var spentByTx: [Data: Set<Int>] = [:]
+            spentByTx.reserveCapacity(inputs.count)
+            for input in inputs {
+                spentByTx[input.previousOutputTxHash, default: []].insert(input.previousOutputIndex)
+            }
 
             let outputC = Output.Columns.allCases.count
             let publicKeyC = PublicKey.Columns.allCases.count
@@ -1191,7 +1247,7 @@ extension GrdbStorage: IStorage {
 
             let sql = """
             SELECT outputs.*, publicKeys.*, transactions.*, blocks.height AS blockHeight
-            FROM outputs 
+            FROM outputs
             INNER JOIN publicKeys ON outputs.publicKeyPath = publicKeys.path
             INNER JOIN transactions ON outputs.transactionHash = transactions.dataHash
             LEFT JOIN blocks ON transactions.blockHash = blocks.headerHash
@@ -1203,7 +1259,7 @@ extension GrdbStorage: IStorage {
             while let row = try rows.next() {
                 let output: Output = row["output"]
 
-                if !inputs.contains(where: { $0.previousOutputTxHash == output.transactionHash && $0.previousOutputIndex == output.index }) {
+                if spentByTx[output.transactionHash]?.contains(output.index) != true {
                     outputs.append(UnspentOutput(output: output, publicKey: row["publicKey"], transaction: row["transaction"], blockHeight: row["blockHeight"]))
                 }
             }
@@ -1343,6 +1399,49 @@ extension GrdbStorage: IStorage {
     public func publicKey(byPath path: String) -> PublicKey? {
         try! dbPool.read { db in
             try PublicKey.filter(PublicKey.Columns.path == path).fetchOne(db)
+        }
+    }
+}
+
+extension GrdbStorage: ISafe3FilteredStorage {
+    /// 在 SQL 层做 SAFE3 reserve 白名单过滤：返回通过过滤的 transaction hash 集合。
+    /// `forReserveOnly` 当前只支持 true（SAFE3 reserve 模式）；保留参数便于未来扩展。
+    public func filteredTransactionHashes(forReserveOnly: Bool, from hashes: [Data]) -> Set<Data> {
+        guard forReserveOnly, !hashes.isEmpty else {
+            return Set(hashes)
+        }
+
+        let plain = Safe3OutputFilter.plainSafeReserveHex
+        let coinbase = Safe3OutputFilter.coinbaseReserveHex
+        let memoLen = Safe3OutputFilter.memoReservePrefixLength
+        let memo = Safe3OutputFilter.memoReservePrefixHex
+
+        let placeholders = hashes.map { _ in "?" }.joined(separator: ",")
+        let args = StatementArguments(hashes)
+
+        let sql = """
+        SELECT DISTINCT transactions.dataHash
+        FROM transactions
+        WHERE transactions.dataHash IN (\(placeholders))
+        AND NOT EXISTS (
+            SELECT 1 FROM outputs
+            WHERE outputs.transactionHash = transactions.dataHash
+            AND outputs.reserve IS NOT NULL
+            AND outputs.reserve != X'\(plain)'
+            AND outputs.reserve != X'\(coinbase)'
+            AND (length(outputs.reserve) < \(memoLen) OR substr(outputs.reserve, 1, \(memoLen)) != X'\(memo)')
+        )
+        """
+
+        return try! dbPool.read { db in
+            var result = Set<Data>()
+            let rows = try Row.fetchCursor(db, sql: sql, arguments: args)
+            while let row = try rows.next() {
+                if let hash: Data = row[0] as? Data {
+                    result.insert(hash)
+                }
+            }
+            return result
         }
     }
 }
