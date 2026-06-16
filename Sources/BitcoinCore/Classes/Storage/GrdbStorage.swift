@@ -530,10 +530,21 @@ extension GrdbStorage: IStorage {
     }
 
     public func save(peerAddresses: [PeerAddress]) {
-        _ = try! dbPool.write { db in
-            for peerAddress in peerAddresses {
-                try peerAddress.insert(db)
+        _ = savePeerAddressesCatchingErrors(peerAddresses)
+    }
+
+    func savePeerAddressesCatchingErrors(_ peerAddresses: [PeerAddress]) -> Bool {
+        do {
+            _ = try dbPool.write { db in
+                for peerAddress in peerAddresses {
+                    try peerAddress.insert(db)
+                }
             }
+            return true
+        } catch {
+            let ips = peerAddresses.map(\.ip).joined(separator: ",")
+            print("GrdbStorage.save(peerAddresses:) failed for [\(ips)]: \(error)")
+            return false
         }
     }
     

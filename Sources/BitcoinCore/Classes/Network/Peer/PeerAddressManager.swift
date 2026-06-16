@@ -1,6 +1,11 @@
 import Foundation
 import HsToolKit
 
+// Internal hook so GrdbStorage can report save failures without changing IStorage.
+protocol IPeerAddressSaveStatusStorage {
+    func savePeerAddressesCatchingErrors(_ peerAddresses: [PeerAddress]) -> Bool
+}
+
 class PeerAddressManager {
     weak var delegate: IPeerAddressManagerDelegate?
 
@@ -89,9 +94,19 @@ extension PeerAddressManager: IPeerAddressManager {
         }
 
         logger?.debug("Adding new addresses: \(newAddresses.count)")
-        queue.sync {
+        let didSave = queue.sync { () -> Bool in
             lookupCount = 0
+
+            if let storage = storage as? IPeerAddressSaveStatusStorage {
+                return storage.savePeerAddressesCatchingErrors(newAddresses)
+            }
+
             storage.save(peerAddresses: newAddresses)
+            return true
+        }
+
+        guard didSave else {
+            return
         }
 
         delegate?.newIpsAdded()
