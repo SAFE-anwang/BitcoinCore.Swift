@@ -213,11 +213,11 @@ public extension BitcoinCore {
         return try transactionCreator.create(from: unspentOutput, params: params)
     }
 
-    func createRawTransaction(params: SendParameters) throws -> Data {
+    func signedTransaction(params: SendParameters) throws -> FullTransaction {
         guard let transactionCreator else {
             throw CoreError.readOnlyCore
         }
-        return try transactionCreator.createRawTransaction(params: params)
+        return try transactionCreator.signedTransaction(params: params)
     }
 
     func validate(address: String, pluginData: [UInt8: IPluginData] = [:]) throws {
@@ -434,14 +434,16 @@ public extension BitcoinCore {
     enum KitState {
         case synced
         case apiSyncing(transactions: Int)
-        case syncing(progress: Double)
+        case syncingStarted
+        case syncing(all: Int, downloaded: Int)
         case notSynced(error: Error)
 
         func toString() -> String {
             switch self {
             case .synced: return "Synced"
             case let .apiSyncing(transactions): return "ApiSyncing-\(transactions)"
-            case let .syncing(progress): return "Syncing-\(Int(progress * 100))"
+            case .syncingStarted: return "Syncing-Started"
+            case let .syncing(all, downloaded): return "Syncing-\(downloaded)/\(all)"
             case let .notSynced(error): return "NotSynced-\(String(reflecting: error))"
             }
         }

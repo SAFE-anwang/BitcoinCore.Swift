@@ -419,7 +419,7 @@ public protocol ITransactionCreator {
     func create(params: SendParameters) throws -> FullTransaction
     func create(from: UnspentOutput, params: SendParameters) throws -> FullTransaction
     func create(from mutableTransaction: MutableTransaction) throws -> FullTransaction
-    func createRawTransaction(params: SendParameters) throws -> Data
+    func signedTransaction(params: SendParameters) throws -> FullTransaction
 }
 
 protocol ITransactionBuilder {
